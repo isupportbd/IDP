@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+src/resources/node_modules
+
+# Build output (Bun runs TypeScript directly — dist not needed)
+dist
+public
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Local data
+src/storage
+*.sqlite
+*.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+bun-error.log*
+*.log
+
+# Test & coverage
+coverage
+__tests__
+
+# Dev tools
+.vscode
+.idea
+*.md
+tmp
+temp
+scratch
+
+# Local env overrides
+.env.local
+.env.development
+.env.test

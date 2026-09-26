@@ -1,0 +1,428 @@
+/* IDP Analyser Dark Theme System (Exact Analyser-v2 Palette) */
+
+:root {
+  color-scheme: dark;
+  --idp-bg: #1a1d21;
+  --idp-bg-surface: #212529;
+  --idp-card: #212529;
+  --idp-card-hover: #2c3238;
+  --idp-border: #3b424b;
+  --idp-border-light: #4f5762;
+  --idp-text-main: #f8f9fa;
+  --idp-text-muted: #adb5bd;
+  --idp-text-dim: #6c757d;
+  --idp-primary: #3b8eed;
+  --idp-primary-hover: #2575d0;
+  --idp-info: #0dcaf0;
+  --idp-success: #198754;
+  --idp-warning: #ffc107;
+  --idp-danger: #dc3545;
+  --idp-purple: #a855f7;
+  --idp-radius: 8px;
+}
+
+html, body {
+  color-scheme: dark !important;
+  background-color: var(--idp-bg) !important;
+  color: var(--idp-text-main) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+
+/* Layout Blueprint Grid System */
+.idp-layout-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--idp-bg);
+  border: 1px solid var(--idp-border);
+  box-sizing: border-box;
+}
+
+.idp-grid-container {
+  max-width: 1220px;
+  width: 100%;
+  margin: 0 auto;
+  border-left: 1px solid var(--idp-border);
+  border-right: 1px solid var(--idp-border);
+  box-sizing: border-box;
+}
+
+.idp-navbar {
+  height: 56px;
+  min-height: 56px;
+  background-color: var(--idp-bg-surface);
+  border-bottom: 1px solid var(--idp-border);
+  position: sticky;
+  top: 0;
+  z-index: 1040;
+  width: 100%;
+}
+
+.idp-footer {
+  height: 48px;
+  background-color: var(--idp-bg-surface);
+  border-top: 1px solid var(--idp-border);
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--idp-text-muted);
+}
+
+.idp-brand {
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--idp-text-main);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.idp-brand:hover {
+  opacity: 0.9;
+}
+
+/* Analyser Cards */
+.idp-card {
+  background-color: var(--idp-card);
+  border: 1px solid var(--idp-border);
+  border-radius: var(--idp-radius);
+  color: var(--idp-text-main);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.idp-card-interactive {
+  cursor: pointer;
+  text-decoration: none;
+  display: block;
+}
+
+.idp-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--idp-border-light);
+  background-color: var(--idp-card-hover);
+}
+
+.idp-card-header {
+  padding: 1rem 1.25rem;
+  background-color: var(--idp-bg-surface);
+  border-bottom: 1px solid var(--idp-border);
+  border-top-left-radius: var(--idp-radius);
+  border-top-right-radius: var(--idp-radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.idp-card-body {
+  padding: 1.25rem;
+}
+
+/* Form Controls (Analyser Inputs) */
+.idp-input,
+.form-control,
+.form-select,
+input,
+select,
+textarea {
+  color-scheme: dark !important;
+  background-color: #1a1d21 !important;
+  border: 1px solid #49515a !important;
+  color: #f8f9fa !important;
+  border-radius: 6px !important;
+  padding: 0.38rem 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-select,
+select {
+  padding-right: 2.25rem !important;
+}
+
+.form-control-sm,
+.form-select-sm,
+.idp-input.form-control-sm,
+.idp-input.form-select-sm {
+  padding-top: 0.32rem !important;
+  padding-bottom: 0.32rem !important;
+  padding-left: 0.75rem !important;
+  font-size: 0.86rem !important;
+  line-height: 1.45 !important;
+}
+
+.idp-input:hover,
+.form-control:hover,
+.form-select:hover,
+input:hover,
+textarea:hover {
+  border-color: #6c757d !important;
+}
+
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.idp-input:focus,
+.form-control:focus,
+.form-select:focus,
+input:focus,
+textarea:focus {
+  background-color: #1a1d21 !important;
+  border-color: #3b8eed !important;
+  box-shadow: 0 0 0 2px rgba(59, 142, 237, 0.25) !important;
+  outline: none;
+}
+
+/* Placeholders */
+::placeholder {
+  color: #6c757d !important;
+  opacity: 1 !important;
+}
+
+::-webkit-input-placeholder {
+  color: #6c757d !important;
+  opacity: 1 !important;
+}
+
+::-moz-placeholder {
+  color: #6c757d !important;
+  opacity: 1 !important;
+}
+
+:-ms-input-placeholder {
+  color: #6c757d !important;
+  opacity: 1 !important;
+}
+
+.form-control::placeholder,
+.idp-input::placeholder,
+input::placeholder,
+textarea::placeholder {
+  color: #6c757d !important;
+  opacity: 1 !important;
+}
+
+.text-muted,
+.text-slate-400,
+.text-secondary {
+  color: #adb5bd !important;
+}
+
+.text-slate-300 {
+  color: #dee2e6 !important;
+}
+
+.form-label {
+  color: #f8f9fa !important;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+
+/* Tables (Analyser style) */
+.idp-table-wrapper {
+  background-color: var(--idp-card);
+  border: 1px solid var(--idp-border);
+  border-radius: var(--idp-radius);
+  overflow: hidden;
+}
+
+.table.idp-table {
+  color: var(--idp-text-main);
+  margin-bottom: 0;
+  border-color: var(--idp-border);
+}
+
+.table.idp-table th {
+  background-color: #1a1d21;
+  color: var(--idp-text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--idp-border);
+  padding: 0.85rem 1rem;
+}
+
+.table.idp-table td {
+  background-color: transparent;
+  color: var(--idp-text-main);
+  border-bottom: 1px solid #2b3035;
+  padding: 0.85rem 1rem;
+  vertical-align: middle;
+}
+
+.table.idp-table tbody tr:hover td {
+  background-color: var(--idp-card-hover);
+}
+
+/* Modals & Dropdowns */
+.modal-content {
+  background-color: var(--idp-card) !important;
+  border: 1px solid var(--idp-border) !important;
+  border-radius: var(--idp-radius) !important;
+  color: var(--idp-text-main) !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55) !important;
+}
+
+.modal-header {
+  border-bottom: 1px solid var(--idp-border) !important;
+  background-color: #1a1d21;
+  border-top-left-radius: var(--idp-radius);
+  border-top-right-radius: var(--idp-radius);
+  padding: 1rem 1.25rem;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--idp-border) !important;
+  background-color: #1a1d21;
+  border-bottom-left-radius: var(--idp-radius);
+  border-bottom-right-radius: var(--idp-radius);
+  padding: 0.85rem 1.25rem;
+}
+
+.btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.dropdown-menu {
+  background-color: var(--idp-card) !important;
+  border: 1px solid var(--idp-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4) !important;
+  padding: 0.4rem;
+}
+
+.dropdown-item {
+  color: var(--idp-text-main) !important;
+  border-radius: 4px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.dropdown-item:hover {
+  background-color: var(--idp-card-hover) !important;
+  color: #fff !important;
+}
+
+/* Badges */
+.idp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.idp-badge-primary {
+  background-color: rgba(59, 142, 237, 0.15);
+  color: #3b8eed;
+  border: 1px solid rgba(59, 142, 237, 0.3);
+}
+
+.idp-badge-success {
+  background-color: rgba(25, 135, 84, 0.15);
+  color: #20c997;
+  border: 1px solid rgba(25, 135, 84, 0.3);
+}
+
+.idp-badge-warning {
+  background-color: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.idp-badge-danger {
+  background-color: rgba(220, 53, 69, 0.15);
+  color: #ea868f;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+/* Custom IDP Buttons (Analyser style) */
+.btn-idp-primary {
+  background-color: #3b8eed;
+  color: #ffffff;
+  border: none;
+  padding: 0.55rem 1.15rem;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.btn-idp-primary:hover {
+  background-color: #2575d0;
+  color: #ffffff;
+}
+
+.btn-idp-secondary {
+  background-color: #343a40;
+  color: #f8f9fa;
+  border: 1px solid #495057;
+  padding: 0.55rem 1.15rem;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.btn-idp-secondary:hover {
+  background-color: #495057;
+  color: #ffffff;
+}
+
+/* Layout Boundary Helper Lines */
+.idp-layout-container {
+  border: 1px dashed rgba(59, 142, 237, 0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  background-color: rgba(33, 37, 41, 0.5);
+  position: relative;
+}
+
+.idp-layout-container::before {
+  content: "CONTAINER AREA";
+  position: absolute;
+  top: -10px;
+  left: 14px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background-color: #212529;
+  color: #0dcaf0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(59, 142, 237, 0.35);
+}
+
+.idp-header-boundary {
+  border-bottom: 2px solid #3b8eed !important;
+}
+
+/* Globally Hide Number Input Spinners / Arrows Across Entire App */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+
+
+
