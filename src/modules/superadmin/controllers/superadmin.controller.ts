@@ -1262,7 +1262,8 @@ const DEFAULT_SYSTEM_COLUMN_MAPPINGS = [
 // 11. Column Mappings (Operating on master column_mappings table)
 export async function getColumnMappings(c: Context) {
   try {
-    const list = await db.select().from(columnMappings).orderBy(asc(columnMappings.id));
+    const rawList = await db.select().from(columnMappings).orderBy(asc(columnMappings.id));
+    const list = rawList.filter((r) => r.dbColumn !== "client_name" && r.dbColumn !== "bin");
     if (list.length === 0) {
       return c.json({ success: true, data: DEFAULT_SYSTEM_COLUMN_MAPPINGS });
     }

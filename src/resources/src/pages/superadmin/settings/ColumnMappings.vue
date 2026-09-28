@@ -44,14 +44,16 @@ const fetchColumnMappings = async () => {
   try {
     const res = await axios.get("/api/superadmin/column-mappings");
     if (res.data?.success && Array.isArray(res.data.data)) {
-      const mapped = res.data.data.map((r: any) => ({
-        dbColumn: r.dbColumn || r.db_column,
-        label: r.label || r.dbColumn || r.db_column,
-        excelHeader: r.excelHeader || r.excel_header || "",
-        isCalculated: r.isCalculated || r.is_calculated || false,
-        isFromDb: r.isFromDb || r.is_from_db || false,
-        isRegexExtracted: r.isRegexExtracted || r.is_regex_extracted || false
-      }));
+      const mapped = res.data.data
+        .filter((r: any) => (r.dbColumn || r.db_column) !== "client_name" && (r.dbColumn || r.db_column) !== "bin")
+        .map((r: any) => ({
+          dbColumn: r.dbColumn || r.db_column,
+          label: r.label || r.dbColumn || r.db_column,
+          excelHeader: r.excelHeader || r.excel_header || "",
+          isCalculated: r.isCalculated || r.is_calculated || false,
+          isFromDb: r.isFromDb || r.is_from_db || false,
+          isRegexExtracted: r.isRegexExtracted || r.is_regex_extracted || false
+        }));
       rows.value = mapped;
       originalRows.value = JSON.parse(JSON.stringify(mapped));
     }
