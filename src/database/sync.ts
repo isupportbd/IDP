@@ -187,25 +187,31 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       } catch {}
     }
 
-    // 6. Dynamic SuperAdmin Account Setup from .env
-    const superadminEmail = (process.env.SUPERADMIN_EMAIL || "").trim().toLowerCase();
-    const superadminPassword = process.env.SUPERADMIN_PASSWORD;
-    const superadminName = process.env.SUPERADMIN_NAME || "Super Admin";
+    // 6. Dynamic SuperAdmin Account Setup from .env (supports SUPERADMIN_* and ADMIN_* like Analyser-v2)
+    const superadminEmail = (process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+    const superadminPassword = process.env.SUPERADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+    const superadminName = process.env.SUPERADMIN_NAME || process.env.ADMIN_NAME || "Super Admin";
 
     if (superadminEmail && superadminPassword) {
-      const [superadminRole] = await db.select().from(roles).where(eq(roles.name, "superadmin")).limit(1);
+      let [superadminRole] = await db.select().from(roles).where(eq(roles.name, "superadmin")).limit(1);
+      if (!superadminRole) {
+        const [createdRole] = await db.insert(roles).values({ name: "superadmin" }).returning();
+        superadminRole = createdRole;
+      }
       const hashedPassword = await bcrypt.hash(superadminPassword, 10);
 
-      const existingAdmin = await db.select().from(users).where(eq(users.email, superadminEmail)).limit(1);
+      const existingAdmin = await db.select().from(users).where(sql`lower(${users.email}) = ${superadminEmail}`).limit(1);
       if (existingAdmin.length > 0) {
         console.log(`[SuperAdmin Sync] Updating credentials for ${superadminEmail} from .env...`);
         await db.update(users).set({
           name: superadminName,
+          email: superadminEmail,
           password: hashedPassword,
           roleId: superadminRole?.id || existingAdmin[0].roleId,
           status: "active",
+          emailVerifiedAt: new Date(),
           updatedAt: new Date()
-        }).where(eq(users.email, superadminEmail));
+        }).where(eq(users.id, existingAdmin[0].id));
       } else {
         console.log(`[SuperAdmin Sync] Creating SuperAdmin account for ${superadminEmail} from .env...`);
         await db.insert(users).values({
@@ -214,13 +220,14 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
           password: hashedPassword,
           roleId: superadminRole?.id,
           status: "active",
+          emailVerifiedAt: new Date(),
           createdAt: new Date(),
           updatedAt: new Date()
         });
       }
       console.log(`[SuperAdmin Sync] SuperAdmin account ready: ${superadminEmail}`);
     } else {
-      console.warn("[SuperAdmin Sync] SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD not found in environment variables.");
+      console.warn("[SuperAdmin Sync] SUPERADMIN_EMAIL / ADMIN_EMAIL not configured in environment variables.");
     }
   } catch (err: any) {
     console.error("[DB Sync Error]", err);

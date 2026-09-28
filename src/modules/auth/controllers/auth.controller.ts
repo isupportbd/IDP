@@ -1,4 +1,4 @@
-import { and, eq, gt, lt, or } from "drizzle-orm";
+import { and, eq, gt, lt, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import { authConfig, jwtConfig } from "@/config/index.js";
 import { broadcast, cookie, db, dispatchEvent, HttpStatusCodes, jwt, password, urls } from "@/framework/facade.js";
@@ -27,6 +27,7 @@ import { companySettings } from "@/modules/firm/database/models/company_settings
 export const register: Handler = async (c: any) => {
   try {
     const body = c.req.valid("json");
+    const email = String(body.email || "").trim().toLowerCase();
 
     // Check if a superadmin exists in system
     const superadminRole = await db.query.roles.findFirst({
@@ -45,7 +46,7 @@ export const register: Handler = async (c: any) => {
     }));
 
     const existingUser = await db.query.users.findFirst({
-      where: eq(users.email, body.email)
+      where: sql`lower(${users.email}) = ${email}`
     });
 
     if (existingUser) {
@@ -245,8 +246,9 @@ export const register: Handler = async (c: any) => {
 export const login: Handler = async (c: any) => {
   try {
     const body = c.req.valid("json");
+    const email = String(body.email || "").trim().toLowerCase();
     const user = await db.query.users.findFirst({
-      where: eq(users.email, body.email),
+      where: sql`lower(${users.email}) = ${email}`,
       with: { role: true }
     });
 

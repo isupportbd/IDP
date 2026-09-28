@@ -50,6 +50,15 @@ const envSchema = z
       .optional()
       .transform((value) => value?.trim() || undefined),
     SUPERADMIN_NAME: z.string().default("Super Admin"),
+    ADMIN_EMAIL: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    ADMIN_PASSWORD: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    ADMIN_NAME: z.string().default("Super Admin"),
     OPEN_API: z
       .string()
       .default("true")
