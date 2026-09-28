@@ -1239,10 +1239,35 @@ export async function deleteClientReference(c: Context) {
   }
 }
 
+const DEFAULT_SYSTEM_COLUMN_MAPPINGS = [
+  { dbColumn: "office", label: "office", excelHeader: "Office", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "be_no", label: "be_no", excelHeader: "BE_NO", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "be_date", label: "be_date", excelHeader: "BE_DATE", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "hs_code", label: "hs_code", excelHeader: "HSCode", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "item_name", label: "item_name", excelHeader: "", isCalculated: false, isFromDb: true, isRegexExtracted: false },
+  { dbColumn: "lc_number", label: "lc_number", excelHeader: "LC Number", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "net_wt", label: "net_wt", excelHeader: "Net_WT", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "excess_qty", label: "excess_qty", excelHeader: "Description", isCalculated: false, isFromDb: false, isRegexExtracted: true },
+  { dbColumn: "total_qty", label: "total_qty", excelHeader: "", isCalculated: true, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "ass_value", label: "ass_value", excelHeader: "Ass. Value", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "cd", label: "cd", excelHeader: "CD", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "rd", label: "rd", excelHeader: "RD", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "sd", label: "sd", excelHeader: "SD", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "base_value_of_vat", label: "base_value_of_vat", excelHeader: "", isCalculated: true, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "vat", label: "vat", excelHeader: "VAT", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "unit_value", label: "unit_value", excelHeader: "", isCalculated: true, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "at", label: "at", excelHeader: "AT", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "bin", label: "bin", excelHeader: "BIN", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "client_name", label: "client_name", excelHeader: "Client Name", isCalculated: false, isFromDb: false, isRegexExtracted: false }
+];
+
 // 11. Column Mappings (Operating on master column_mappings table)
 export async function getColumnMappings(c: Context) {
   try {
     const list = await db.select().from(columnMappings).orderBy(asc(columnMappings.id));
+    if (list.length === 0) {
+      return c.json({ success: true, data: DEFAULT_SYSTEM_COLUMN_MAPPINGS });
+    }
     return c.json({ success: true, data: list });
   } catch (error: any) {
     console.error("Error fetching column mappings:", error);
