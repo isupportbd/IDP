@@ -57,7 +57,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
       `INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING`
     );
     // Auto-clean stale column mapping entries
-    await executeSingleSql(`DELETE FROM column_mappings WHERE db_column = 'client_name'`);
+    await executeSingleSql(`DELETE FROM column_mappings WHERE db_column IN ('client_name', 'clientName') OR label = 'client_name'`);
   } catch (rErr) {
     console.warn("[DB Roles Warning]", rErr);
   }
