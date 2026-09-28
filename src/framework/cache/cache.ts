@@ -109,6 +109,19 @@ export const cache = {
         memoryStore.delete(k);
       }
     }
+
+    const client = redisClientIfReady();
+    if (client) {
+      try {
+        const pattern = `${targetPrefix}*`;
+        const keys = await client.keys(pattern);
+        if (keys.length > 0) {
+          await client.del(...keys);
+        }
+      } catch (err) {
+        console.error(`Error deleting keys by prefix ${prefix} from Redis:`, err);
+      }
+    }
   },
 
   /**
