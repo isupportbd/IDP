@@ -57,6 +57,7 @@ async function startBun(
       }
       return app.fetch(req);
     },
+    hostname: "0.0.0.0",
     port
   };
 

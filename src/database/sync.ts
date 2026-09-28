@@ -25,19 +25,35 @@ async function executeSingleSql(rawSql: string) {
 export async function syncDatabaseSchemaAndSuperAdmin() {
   console.log("[DB Sync] Starting clean schema and SuperAdmin synchronization...");
 
-  // 1. Run all base SQL migrations (creates all 32 empty tables cleanly)
+  // 1. Run all base SQL migrations ONLY if database is fresh/empty
   try {
-    const migrationsDir = path.resolve(process.cwd(), "src/database/migrations/postgresql");
-    if (fs.existsSync(migrationsDir)) {
-      const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();
-      for (const file of files) {
-        const filePath = path.join(migrationsDir, file);
-        const sqlContent = fs.readFileSync(filePath, "utf-8");
-        const statements = sqlContent.split("--> statement-breakpoint");
-        for (const stmt of statements) {
-          await executeSingleSql(stmt);
+    let tablesExist = false;
+    try {
+      const check = await db.execute(sql`SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users' LIMIT 1`);
+      const rows = check.rows || check;
+      if (Array.isArray(rows) && rows.length > 0) {
+        tablesExist = true;
+      }
+    } catch {
+      tablesExist = false;
+    }
+
+    if (!tablesExist) {
+      console.log("[DB Sync] Fresh database detected, creating all initial tables...");
+      const migrationsDir = path.resolve(process.cwd(), "src/database/migrations/postgresql");
+      if (fs.existsSync(migrationsDir)) {
+        const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();
+        for (const file of files) {
+          const filePath = path.join(migrationsDir, file);
+          const sqlContent = fs.readFileSync(filePath, "utf-8");
+          const statements = sqlContent.split("--> statement-breakpoint");
+          for (const stmt of statements) {
+            await executeSingleSql(stmt);
+          }
         }
       }
+    } else {
+      console.log("[DB Sync] Existing database verified (skipping base DDL creation).");
     }
   } catch (mErr) {
     console.warn("[DB Sync Migration Warning]", mErr);

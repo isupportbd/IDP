@@ -6,7 +6,7 @@ WORKDIR /app
 ARG UI=true
 ENV UI=${UI}
 
-COPY package.json ./
+COPY package.json bun.lock* ./
 RUN bun install
 
 COPY . .
