@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import bcrypt from "bcryptjs";
 import { initDatabase } from "../framework/database/connection.js";
 import { db } from "../framework/facade.js";
@@ -6,12 +8,37 @@ import { plans } from "../modules/superadmin/database/models/plans.js";
 import { paymentSettings } from "../modules/superadmin/database/models/payment_settings.js";
 import { users } from "../modules/auth/database/models/user.js";
 import { roles } from "../modules/auth/database/models/role.js";
+import { customerTypes } from "../modules/services/database/models/customer_types.js";
+import { clientReferences } from "../modules/services/database/models/references.js";
 
 async function main() {
   await initDatabase();
-  console.log("Setting up SuperAdmin & Subscription database tables in PostgreSQL...");
+  console.log("Setting up PostgreSQL database schema and SuperAdmin account...");
 
-  // 1. Create tables if not exist
+  // 1. Run all base SQL migrations
+  const migrationsDir = path.resolve(process.cwd(), "src/database/migrations/postgresql");
+  if (fs.existsSync(migrationsDir)) {
+    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort();
+    for (const file of files) {
+      const filePath = path.join(migrationsDir, file);
+      const sqlContent = fs.readFileSync(filePath, "utf-8");
+      const statements = sqlContent.split("--> statement-breakpoint");
+      for (const stmt of statements) {
+        const cleanStmt = stmt.trim();
+        if (cleanStmt) {
+          try {
+            await db.execute(sql.raw(cleanStmt));
+          } catch (e: any) {
+            if (!e.message?.includes("already exists")) {
+              console.warn(`[Migration notice: ${file}] ${e.message}`);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Ensure SuperAdmin & Subscription tables exist
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS plans (
       id SERIAL PRIMARY KEY,
@@ -25,9 +52,7 @@ async function main() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
-  `);
 
-  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS payment_settings (
       id SERIAL PRIMARY KEY,
       bkash_number VARCHAR(50) NOT NULL DEFAULT '01719950891',
@@ -37,9 +62,7 @@ async function main() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
-  `);
 
-  await db.execute(sql`
     CREATE TABLE IF NOT EXISTS subscription_transactions (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -56,15 +79,16 @@ async function main() {
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
-  `);
 
-  // Drop redundant client_types table if created earlier (we use canonical customer_types)
-  await db.execute(sql`
-    DROP TABLE IF EXISTS client_types;
-  `);
+    CREATE TABLE IF NOT EXISTS roles (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL UNIQUE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
 
-  // 2. Add columns to users table if not exist
-  await db.execute(sql`
+    INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING;
+
     ALTER TABLE users ADD COLUMN IF NOT EXISTS mobile VARCHAR(20);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_id INTEGER;
@@ -72,6 +96,7 @@ async function main() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS trx_id VARCHAR(100);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS paid_amount INTEGER DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS advance_balance INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_balance DOUBLE PRECISION DEFAULT 0;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_id INTEGER;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS exp_date TIMESTAMP;
@@ -81,10 +106,6 @@ async function main() {
     ALTER TABLE subscription_transactions ADD COLUMN IF NOT EXISTS gross_amount INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE subscription_transactions ADD COLUMN IF NOT EXISTS gateway_charge DOUBLE PRECISION NOT NULL DEFAULT 0;
     ALTER TABLE subscription_transactions ADD COLUMN IF NOT EXISTS net_amount INTEGER NOT NULL DEFAULT 0;
-
-    UPDATE users SET billing_cycle = 'yearly' WHERE trx_id ILIKE '%yearly%' OR trx_id ILIKE '%(y)%';
-    UPDATE users SET billing_cycle = 'monthly' WHERE billing_cycle IS NULL OR billing_cycle = '';
-    UPDATE users SET trx_id = TRIM(REGEXP_REPLACE(trx_id, '\\s*\\((monthly|yearly|m|y)\\)', '', 'gi')) WHERE trx_id IS NOT NULL;
   `);
 
   // 3. Seed real plans if not exist
@@ -140,7 +161,7 @@ async function main() {
     ]);
   }
 
-  // 4. Seed Payment Config
+  // 4. Seed Payment Config if not exist
   const existingPayment = await db.select().from(paymentSettings);
   if (existingPayment.length === 0) {
     console.log("Seeding default payment settings...");
@@ -151,23 +172,31 @@ async function main() {
     });
   }
 
-  // 5. Dynamic SuperAdmin Account Setup from .env (Zero hardcoding)
+  // 5. Seed Customer Types if not exist
+  const defaultTypes = [
+    { typeName: "Importer", description: "Standard import client" },
+    { typeName: "Commercial Importer", description: "Commercial import business" },
+    { typeName: "Manufacturer", description: "Manufacturing & production entity" },
+    { typeName: "Trader", description: "General trading & distribution" },
+    { typeName: "Exporter", description: "Export-oriented firm" },
+    { typeName: "Service Provider", description: "Service and consultancy provider" }
+  ];
+  for (const item of defaultTypes) {
+    try {
+      await db.insert(customerTypes).values({
+        typeName: item.typeName,
+        description: item.description,
+        isActive: true
+      }).onConflictDoNothing();
+    } catch {}
+  }
+
+  // 6. Dynamic SuperAdmin Account Setup from .env (Zero hardcoding)
   const superadminEmail = process.env.SUPERADMIN_EMAIL?.trim()?.toLowerCase();
   const superadminPassword = process.env.SUPERADMIN_PASSWORD;
   const superadminName = process.env.SUPERADMIN_NAME || "Super Admin";
 
   if (superadminEmail && superadminPassword) {
-    // Ensure roles table exists and has superadmin role
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS roles (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL UNIQUE,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-      );
-      INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING;
-    `);
-
     const [superadminRole] = await db.select().from(roles).where(eq(roles.name, "superadmin")).limit(1);
     const hashedPassword = await bcrypt.hash(superadminPassword, 10);
 
@@ -197,11 +226,11 @@ async function main() {
     console.log("[SuperAdmin Sync] No SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD set in .env. Skipping superadmin user creation.");
   }
 
-  console.log("SuperAdmin & database initialization complete!");
+  console.log("Database schema and SuperAdmin initialization complete!");
   process.exit(0);
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error("Migration error:", err);
   process.exit(1);
 });
