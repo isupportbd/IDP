@@ -22,6 +22,12 @@ export async function createKernel() {
   const app = createHttpApp();
 
   await initDatabase();
+  try {
+    const { syncDatabaseSchemaAndSuperAdmin } = await import("@/database/sync.js");
+    await syncDatabaseSchemaAndSuperAdmin();
+  } catch (syncErr) {
+    console.error("[Kernel DB Sync Warning]", syncErr);
+  }
   await bootQueueJobs();
   await registerModuleRoutes(app);
 
