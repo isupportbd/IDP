@@ -344,7 +344,7 @@ onMounted(async () => {
                 <div class="col-md-6">
                   <label class="form-label text-light fw-semibold">Monthly Rate (Tk) *</label>
                   <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-muted">৳</span>
+                    <span class="input-group-text">৳</span>
                     <input
                       v-model.number="planForm.rateMonthly"
                       type="number"
@@ -359,7 +359,7 @@ onMounted(async () => {
                 <div class="col-md-6">
                   <label class="form-label text-light fw-semibold">Yearly Rate (Tk) *</label>
                   <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-muted">৳</span>
+                    <span class="input-group-text">৳</span>
                     <input
                       v-model.number="planForm.rateYearly"
                       type="number"
@@ -423,7 +423,7 @@ onMounted(async () => {
                       readonly
                       placeholder="0"
                     />
-                    <span class="input-group-text bg-dark border-secondary text-muted">%</span>
+                    <span class="input-group-text">%</span>
                   </div>
                   <div class="text-muted small mt-1">Calculated automatically from monthly vs yearly rate.</div>
                 </div>
