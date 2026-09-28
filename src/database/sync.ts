@@ -58,6 +58,11 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
     );
     // Auto-clean stale column mapping entries
     await executeSingleSql(`DELETE FROM column_mappings WHERE db_column IN ('client_name', 'clientName') OR label = 'client_name'`);
+    
+    // Ensure all plan columns exist
+    await executeSingleSql(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_clients INTEGER NOT NULL DEFAULT 50`);
+    await executeSingleSql(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_storage_mb INTEGER NOT NULL DEFAULT 1024`);
+    await executeSingleSql(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_accounts BOOLEAN NOT NULL DEFAULT false`);
   } catch (rErr) {
     console.warn("[DB Roles Warning]", rErr);
   }
