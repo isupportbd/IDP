@@ -1256,14 +1256,15 @@ const DEFAULT_SYSTEM_COLUMN_MAPPINGS = [
   { dbColumn: "base_value_of_vat", label: "base_value_of_vat", excelHeader: "", isCalculated: true, isFromDb: false, isRegexExtracted: false },
   { dbColumn: "vat", label: "vat", excelHeader: "VAT", isCalculated: false, isFromDb: false, isRegexExtracted: false },
   { dbColumn: "unit_value", label: "unit_value", excelHeader: "", isCalculated: true, isFromDb: false, isRegexExtracted: false },
-  { dbColumn: "at", label: "at", excelHeader: "AT", isCalculated: false, isFromDb: false, isRegexExtracted: false }
+  { dbColumn: "at", label: "at", excelHeader: "AT", isCalculated: false, isFromDb: false, isRegexExtracted: false },
+  { dbColumn: "bin", label: "bin", excelHeader: "BIN", isCalculated: false, isFromDb: false, isRegexExtracted: false }
 ];
 
 // 11. Column Mappings (Operating on master column_mappings table)
 export async function getColumnMappings(c: Context) {
   try {
     const rawList = await db.select().from(columnMappings).orderBy(asc(columnMappings.id));
-    const list = rawList.filter((r) => r.dbColumn !== "client_name" && r.dbColumn !== "bin");
+    const list = rawList.filter((r) => r.dbColumn !== "client_name");
     if (list.length === 0) {
       return c.json({ success: true, data: DEFAULT_SYSTEM_COLUMN_MAPPINGS });
     }

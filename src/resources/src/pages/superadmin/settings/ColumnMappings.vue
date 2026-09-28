@@ -45,7 +45,7 @@ const fetchColumnMappings = async () => {
     const res = await axios.get("/api/superadmin/column-mappings");
     if (res.data?.success && Array.isArray(res.data.data)) {
       const mapped = res.data.data
-        .filter((r: any) => (r.dbColumn || r.db_column) !== "client_name" && (r.dbColumn || r.db_column) !== "bin")
+        .filter((r: any) => (r.dbColumn || r.db_column) !== "client_name")
         .map((r: any) => ({
           dbColumn: r.dbColumn || r.db_column,
           label: r.label || r.dbColumn || r.db_column,
