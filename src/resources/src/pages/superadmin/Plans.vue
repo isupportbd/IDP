@@ -18,7 +18,7 @@ const {
   savePaymentSettings
 } = useSuperAdminApi();
 
-const showPlanModal = ref(false);
+const activeTab = ref<'plans' | 'form' | 'gateway'>('plans');
 const editingPlanId = ref<number | null>(null);
 const isSubmittingPlan = ref(false);
 
@@ -57,7 +57,7 @@ const calculateDiscount = () => {
   }
 };
 
-const openCreatePlanModal = () => {
+const openCreatePlanTab = () => {
   editingPlanId.value = null;
   planForm.value = {
     name: "",
@@ -71,10 +71,10 @@ const openCreatePlanModal = () => {
     featuresText: "",
     status: "active"
   };
-  showPlanModal.value = true;
+  activeTab.value = 'form';
 };
 
-const openEditPlanModal = (plan: Plan) => {
+const openEditPlanTab = (plan: Plan) => {
   editingPlanId.value = plan.id;
   planForm.value = {
     name: plan.name,
@@ -88,7 +88,12 @@ const openEditPlanModal = (plan: Plan) => {
     featuresText: (plan.features || []).join("\n"),
     status: plan.status || "active"
   };
-  showPlanModal.value = true;
+  activeTab.value = 'form';
+};
+
+const cancelForm = () => {
+  editingPlanId.value = null;
+  activeTab.value = 'plans';
 };
 
 const handleSavePlan = async () => {
@@ -123,7 +128,9 @@ const handleSavePlan = async () => {
       await createPlan(payload);
       toast.success("Subscription plan created successfully!");
     }
-    showPlanModal.value = false;
+    await fetchPlans();
+    editingPlanId.value = null;
+    activeTab.value = 'plans';
   } catch (e: any) {
     toast.error(e?.response?.data?.error || "Failed to save plan");
   } finally {
@@ -136,6 +143,7 @@ const handleDeletePlan = async (plan: Plan) => {
   try {
     await deletePlan(plan.id);
     toast.success("Subscription plan deleted successfully!");
+    await fetchPlans();
   } catch (e: any) {
     toast.error(e?.response?.data?.error || "Failed to delete plan");
   }
@@ -158,7 +166,7 @@ onMounted(async () => {
 <template>
   <div class="py-2">
     <!-- Header -->
-    <div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
       <div>
         <div class="d-flex align-items-center gap-2 mb-1">
           <router-link to="/" class="text-muted text-decoration-none small">
@@ -167,126 +175,134 @@ onMounted(async () => {
           <span class="text-muted small">/</span>
           <span class="text-primary small fw-semibold">Plans & Payments</span>
         </div>
-        <h4 class="text-white fw-bold mb-0">Subscription Plans & bKash Gateway</h4>
+        <h4 class="text-white fw-bold mb-0">Subscription Plans & Payment Gateway</h4>
       </div>
-      <button class="btn btn-idp-primary btn-sm px-3 py-1.5 fw-semibold d-flex align-items-center gap-2" @click="openCreatePlanModal">
+      <button 
+        v-if="activeTab !== 'form'"
+        class="btn btn-idp-primary btn-sm px-3 py-2 fw-semibold d-flex align-items-center gap-2" 
+        @click="openCreatePlanTab"
+      >
         <i class="bi bi-plus-lg"></i> Add New Plan
+      </button>
+      <button 
+        v-else
+        class="btn btn-outline-secondary btn-sm px-3 py-2 fw-semibold d-flex align-items-center gap-2" 
+        @click="cancelForm"
+      >
+        <i class="bi bi-arrow-left"></i> Back to Plans
       </button>
     </div>
 
-    <div class="row g-4 mb-4">
-      <!-- 1. bKash Gateway Configuration -->
-      <div class="col-lg-4">
-        <div class="idp-card p-4 h-100">
-          <h5 class="text-white fw-bold mb-3 d-flex align-items-center gap-2">
-            <i class="bi bi-wallet2 text-danger"></i> bKash Payment Gateway
-          </h5>
-          <p class="text-muted small mb-4">
-            Live configuration for direct SaaS tenant signups with manual bKash Transaction ID (TrxID) verification.
-          </p>
+    <!-- Navigation Tabs -->
+    <div class="d-flex flex-wrap gap-2 mb-4 border-bottom border-secondary border-opacity-50 pb-3">
+      <button
+        class="btn btn-sm px-3 py-2 fw-semibold rounded-pill d-flex align-items-center gap-2"
+        :class="activeTab === 'plans' ? 'btn-primary shadow' : 'btn-dark border-secondary text-muted'"
+        @click="activeTab = 'plans'"
+      >
+        <i class="bi bi-grid-3x3-gap-fill"></i> Subscription Plans ({{ plans.length }})
+      </button>
+      <button
+        class="btn btn-sm px-3 py-2 fw-semibold rounded-pill d-flex align-items-center gap-2"
+        :class="activeTab === 'form' ? 'btn-primary shadow' : 'btn-dark border-secondary text-muted'"
+        @click="openCreatePlanTab"
+      >
+        <i class="bi" :class="editingPlanId ? 'bi-pencil-square' : 'bi-plus-circle-fill'"></i>
+        {{ editingPlanId ? 'Edit Plan' : 'Create New Plan' }}
+      </button>
+      <button
+        class="btn btn-sm px-3 py-2 fw-semibold rounded-pill d-flex align-items-center gap-2"
+        :class="activeTab === 'gateway' ? 'btn-primary shadow' : 'btn-dark border-secondary text-muted'"
+        @click="activeTab = 'gateway'"
+      >
+        <i class="bi bi-wallet2 text-danger"></i> bKash & Gateway Settings
+      </button>
+    </div>
 
-          <div class="mb-3">
-            <label class="form-label text-light">bKash Merchant / Agent / Personal No</label>
-            <input
-              v-model="paymentSettings.bkashNumber"
-              type="text"
-              class="form-control idp-input font-monospace"
-              placeholder="01XXXXXXXXX"
-            />
+    <!-- TAB 1: ALL SUBSCRIPTION PLANS -->
+    <div v-if="activeTab === 'plans'">
+      <div class="idp-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h5 class="text-white fw-bold mb-1">Active Subscription Packages</h5>
+            <p class="text-muted small mb-0">Configured pricing packages available for tenant registration and subscriptions.</p>
           </div>
-
-          <div class="mb-3">
-            <label class="form-label text-light">bKash Send Money / Fee (%)</label>
-            <input
-              v-model.number="paymentSettings.bkashCharge"
-              type="number"
-              step="0.1"
-              class="form-control idp-input font-monospace"
-            />
-            <div class="text-muted small mt-1">Default 1.8% added automatically at registration checkout.</div>
-          </div>
-
-          <div class="mb-4">
-            <label class="form-label text-light">Nagad Number (Optional)</label>
-            <input
-              v-model="paymentSettings.nagadNumber"
-              type="text"
-              class="form-control idp-input font-monospace"
-              placeholder="01XXXXXXXXX"
-            />
-          </div>
-
-          <button
-            class="btn btn-idp-primary w-100 py-2.5 fw-bold"
-            :disabled="isSaving"
-            @click="handleSavePaymentConfig"
-          >
-            {{ isSaving ? 'Saving to Database...' : 'Save Payment Config' }}
+          <button class="btn btn-idp-primary btn-sm px-3 py-1.5 fw-semibold" @click="openCreatePlanTab">
+            <i class="bi bi-plus-lg me-1"></i> Add New Plan
           </button>
         </div>
-      </div>
 
-      <!-- 2. Real Subscription Plans Grid -->
-      <div class="col-lg-8">
-        <div class="idp-card p-4 h-100">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="text-white fw-bold mb-0">Active Packages in PostgreSQL</h5>
-            <span class="badge bg-primary">{{ plans.length }} Packages</span>
-          </div>
+        <div v-if="isLoadingPlans" class="py-5 text-center text-muted">
+          <span class="spinner-border spinner-border-sm text-primary me-2"></span>
+          Loading subscription packages...
+        </div>
 
-          <div v-if="isLoadingPlans" class="py-5 text-center text-muted">
-            <span class="spinner-border spinner-border-sm text-primary me-2"></span>
-            Loading subscription packages...
-          </div>
+        <div v-else-if="plans.length === 0" class="py-5 text-center text-muted">
+          <i class="bi bi-box-seam fs-1 d-block mb-2 text-secondary"></i>
+          <h6>No Subscription Plans Created Yet</h6>
+          <p class="small">Click "Add New Plan" to create your first SaaS subscription package.</p>
+          <button class="btn btn-idp-primary btn-sm mt-2" @click="openCreatePlanTab">
+            <i class="bi bi-plus-lg me-1"></i> Create Plan Now
+          </button>
+        </div>
 
-          <div v-else class="row g-3">
-            <div v-for="plan in plans" :key="plan.id" class="col-md-6">
-              <div class="p-3 bg-dark border border-secondary rounded h-100 d-flex flex-column">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                  <div>
-                    <h6 class="text-white fw-bold mb-1">{{ plan.name }}</h6>
-                    <div class="d-flex flex-wrap gap-1 mt-1">
-                      <span class="badge bg-info bg-opacity-25 text-info border border-info small">
-                        Max {{ plan.maxUsers }} Users
-                      </span>
-                      <span class="badge bg-primary bg-opacity-25 text-primary border border-primary small">
-                        Max {{ plan.maxClients || 50 }} Clients
-                      </span>
-                      <span class="badge bg-secondary bg-opacity-25 text-light border border-secondary small">
-                        <i class="bi bi-hdd me-1"></i>{{ (plan.maxStorageMB || 1024) >= 1024 ? ((plan.maxStorageMB || 1024) / 1024).toFixed((plan.maxStorageMB || 1024) % 1024 === 0 ? 0 : 1) + ' GB' : (plan.maxStorageMB || 1024) + ' MB' }}
-                      </span>
-                      <span v-if="plan.hasAccounts" class="badge bg-success bg-opacity-25 text-success border border-success small">
-                        <i class="bi bi-shield-check me-1"></i>Accounts
-                      </span>
-                      <span v-else class="badge bg-warning bg-opacity-25 text-warning border border-warning small">
-                        <i class="bi bi-lock me-1"></i>No Accounts
-                      </span>
-                    </div>
-                  </div>
-                  <div class="text-end">
-                    <div class="text-success fw-bold font-monospace fs-5">৳ {{ plan.rateMonthly }}<span class="text-muted fs-6">/mo</span></div>
+        <div v-else class="row g-4">
+          <div v-for="plan in plans" :key="plan.id" class="col-lg-4 col-md-6">
+            <div class="p-4 bg-dark bg-opacity-75 border border-secondary border-opacity-75 rounded-3 h-100 d-flex flex-column hover-shadow">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <h5 class="text-white fw-bold mb-1">{{ plan.name }}</h5>
+                  <div class="d-flex flex-wrap gap-1 mt-2">
+                    <span class="badge bg-info bg-opacity-25 text-info border border-info small">
+                      Max {{ plan.maxUsers }} Users
+                    </span>
+                    <span class="badge bg-primary bg-opacity-25 text-primary border border-primary small">
+                      Max {{ plan.maxClients || 50 }} Clients
+                    </span>
+                    <span class="badge bg-secondary bg-opacity-25 text-light border border-secondary small">
+                      <i class="bi bi-hdd me-1"></i>{{ (plan.maxStorageMB || 1024) >= 1024 ? ((plan.maxStorageMB || 1024) / 1024).toFixed((plan.maxStorageMB || 1024) % 1024 === 0 ? 0 : 1) + ' GB' : (plan.maxStorageMB || 1024) + ' MB' }}
+                    </span>
+                    <span v-if="plan.hasAccounts" class="badge bg-success bg-opacity-25 text-success border border-success small">
+                      <i class="bi bi-shield-check me-1"></i>Accounts
+                    </span>
+                    <span v-else class="badge bg-warning bg-opacity-25 text-warning border border-warning small">
+                      <i class="bi bi-lock me-1"></i>No Accounts
+                    </span>
                   </div>
                 </div>
+              </div>
 
-                <div class="text-muted small mb-3 pb-2 border-bottom border-secondary border-opacity-50">
-                  Yearly: <strong class="text-light">৳ {{ plan.rateYearly }}</strong>
-                  <span class="badge bg-success bg-opacity-25 text-success ms-1">Save {{ plan.yearlyDiscountPercent }}%</span>
-                </div>
+              <div class="d-flex align-items-baseline gap-2 mb-2">
+                <div class="text-success fw-bold font-monospace fs-4">৳ {{ plan.rateMonthly }}</div>
+                <div class="text-muted small">/ month</div>
+              </div>
 
-                <ul class="list-unstyled mb-4 small flex-grow-1">
+              <div class="text-muted small mb-3 pb-3 border-bottom border-secondary border-opacity-50">
+                Yearly Rate: <strong class="text-light">৳ {{ plan.rateYearly }}</strong>
+                <span v-if="plan.yearlyDiscountPercent > 0" class="badge bg-success bg-opacity-25 text-success ms-1">
+                  Save {{ plan.yearlyDiscountPercent }}%
+                </span>
+              </div>
+
+              <div class="mb-4 flex-grow-1">
+                <div class="text-muted small fw-semibold mb-2">Features Included:</div>
+                <ul class="list-unstyled mb-0 small">
                   <li v-for="(f, i) in (plan.features || [])" :key="i" class="text-light mb-1.5 d-flex align-items-center gap-2">
-                    <i class="bi bi-check2-circle text-primary"></i> {{ f }}
+                    <i class="bi bi-check2-circle text-primary flex-shrink-0"></i> <span>{{ f }}</span>
+                  </li>
+                  <li v-if="!plan.features || plan.features.length === 0" class="text-muted fst-italic">
+                    Standard VAT Automation Features
                   </li>
                 </ul>
+              </div>
 
-                <div class="d-flex gap-2 pt-2 border-top border-secondary border-opacity-50">
-                  <button class="btn btn-sm btn-outline-primary flex-grow-1" @click="openEditPlanModal(plan)">
-                    <i class="bi bi-pencil me-1"></i> Edit Plan
-                  </button>
-                  <button class="btn btn-sm btn-outline-danger" @click="handleDeletePlan(plan)">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </div>
+              <div class="d-flex gap-2 pt-3 border-top border-secondary border-opacity-50">
+                <button class="btn btn-sm btn-outline-primary flex-grow-1 fw-semibold py-1.5" @click="openEditPlanTab(plan)">
+                  <i class="bi bi-pencil me-1"></i> Edit Plan
+                </button>
+                <button class="btn btn-sm btn-outline-danger px-3 py-1.5" title="Delete Plan" @click="handleDeletePlan(plan)">
+                  <i class="bi bi-trash"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -294,64 +310,72 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- ADD / EDIT PLAN MODAL -->
-    <div
-      v-if="showPlanModal"
-      class="modal fade show d-block"
-      tabindex="-1"
-      style="background: rgba(0, 0, 0, 0.75);"
-    >
-      <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
-        <div class="modal-content idp-card">
-          <div class="modal-header border-secondary">
-            <h5 class="modal-title text-white fw-bold">
-              {{ editingPlanId ? 'Edit Subscription Plan' : 'Create Subscription Plan' }}
-            </h5>
-            <button type="button" class="btn-close btn-close-white" @click="showPlanModal = false"></button>
-          </div>
-          <div class="modal-body p-4">
+    <!-- TAB 2: DEDICATED FULL-TAB FORM (NO MODAL) -->
+    <div v-else-if="activeTab === 'form'">
+      <div class="row g-4">
+        <!-- Form Column -->
+        <div class="col-lg-7">
+          <div class="idp-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary border-opacity-50">
+              <div>
+                <h5 class="text-white fw-bold mb-1">
+                  {{ editingPlanId ? 'Edit Subscription Plan' : 'Create New Subscription Plan' }}
+                </h5>
+                <p class="text-muted small mb-0">Fill in the package pricing, user capacities, and access modules.</p>
+              </div>
+              <button class="btn btn-sm btn-outline-secondary" @click="cancelForm">
+                <i class="bi bi-x-lg me-1"></i> Cancel
+              </button>
+            </div>
+
             <form @submit.prevent="handleSavePlan">
               <div class="mb-3">
-                <label class="form-label text-light">Plan Name *</label>
+                <label class="form-label text-light fw-semibold">Plan Name *</label>
                 <input
                   v-model="planForm.name"
                   type="text"
                   class="form-control idp-input"
                   required
-                  placeholder="e.g. Professional VAT Consultant"
+                  placeholder="e.g. Professional VAT Firm / Standard Business"
                 />
               </div>
 
               <div class="row g-3 mb-3">
                 <div class="col-md-6">
-                  <label class="form-label text-light">Monthly Rate (Tk) *</label>
-                  <input
-                    v-model.number="planForm.rateMonthly"
-                    type="number"
-                    class="form-control idp-input font-monospace"
-                    required
-                    min="0"
-                    placeholder="e.g. 1500"
-                    @input="calculateDiscount"
-                  />
+                  <label class="form-label text-light fw-semibold">Monthly Rate (Tk) *</label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-dark border-secondary text-muted">৳</span>
+                    <input
+                      v-model.number="planForm.rateMonthly"
+                      type="number"
+                      class="form-control idp-input font-monospace"
+                      required
+                      min="0"
+                      placeholder="e.g. 3000"
+                      @input="calculateDiscount"
+                    />
+                  </div>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label text-light">Yearly Rate (Tk) *</label>
-                  <input
-                    v-model.number="planForm.rateYearly"
-                    type="number"
-                    class="form-control idp-input font-monospace"
-                    required
-                    min="0"
-                    placeholder="e.g. 15000"
-                    @input="calculateDiscount"
-                  />
+                  <label class="form-label text-light fw-semibold">Yearly Rate (Tk) *</label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-dark border-secondary text-muted">৳</span>
+                    <input
+                      v-model.number="planForm.rateYearly"
+                      type="number"
+                      class="form-control idp-input font-monospace"
+                      required
+                      min="0"
+                      placeholder="e.g. 30000"
+                      @input="calculateDiscount"
+                    />
+                  </div>
                 </div>
               </div>
 
               <div class="row g-3 mb-3">
                 <div class="col-md-6">
-                  <label class="form-label text-light">Max Allowed Sub-users *</label>
+                  <label class="form-label text-light fw-semibold">Max Allowed Sub-users *</label>
                   <input
                     v-model.number="planForm.maxUsers"
                     type="number"
@@ -360,9 +384,10 @@ onMounted(async () => {
                     min="1"
                     placeholder="e.g. 5"
                   />
+                  <div class="text-muted small mt-1">Number of staff accounts the admin can create.</div>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label text-light">Max Allowed Clients *</label>
+                  <label class="form-label text-light fw-semibold">Max Allowed Clients *</label>
                   <input
                     v-model.number="planForm.maxClients"
                     type="number"
@@ -371,12 +396,13 @@ onMounted(async () => {
                     min="1"
                     placeholder="e.g. 50"
                   />
+                  <div class="text-muted small mt-1">Maximum client companies the firm can manage.</div>
                 </div>
               </div>
 
               <div class="row g-3 mb-3">
                 <div class="col-md-6">
-                  <label class="form-label text-light">Database Storage (MB) *</label>
+                  <label class="form-label text-light fw-semibold">Database Storage (MB) *</label>
                   <input
                     v-model.number="planForm.maxStorageMB"
                     type="number"
@@ -388,59 +414,182 @@ onMounted(async () => {
                   <div class="text-muted small mt-1">1024 MB = 1 GB, 2048 MB = 2 GB</div>
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label text-light">Yearly Discount (%)</label>
-                  <input
-                    v-model.number="planForm.yearlyDiscountPercent"
-                    type="number"
-                    class="form-control idp-input font-monospace bg-dark text-muted"
-                    readonly
-                    placeholder="0"
-                  />
+                  <label class="form-label text-light fw-semibold">Yearly Discount (%)</label>
+                  <div class="input-group">
+                    <input
+                      v-model.number="planForm.yearlyDiscountPercent"
+                      type="number"
+                      class="form-control idp-input font-monospace bg-dark text-muted"
+                      readonly
+                      placeholder="0"
+                    />
+                    <span class="input-group-text bg-dark border-secondary text-muted">%</span>
+                  </div>
+                  <div class="text-muted small mt-1">Calculated automatically from monthly vs yearly rate.</div>
                 </div>
               </div>
 
-              <div class="p-3 mb-3 rounded bg-dark border border-secondary border-opacity-50">
+              <div class="p-3 mb-3 rounded bg-dark border border-secondary border-opacity-75">
                 <div class="form-check form-switch mb-0">
                   <input
                     id="hasAccountsSwitch"
                     v-model="planForm.hasAccounts"
                     class="form-check-input"
                     type="checkbox"
+                    role="switch"
                   />
                   <label class="form-check-label text-light fw-semibold" for="hasAccountsSwitch">
                     Enable Accounts & Billing Module Access
                   </label>
                 </div>
                 <div class="text-muted small mt-1 ms-4">
-                  When enabled, tenants on this plan can access Invoicing, Billing, and Collections.
+                  When enabled, tenants on this plan can access Invoicing, Billing, Firm Accounts, and Collections.
                 </div>
               </div>
 
               <div class="mb-4">
-                <label class="form-label text-light">Features List (One feature per line)</label>
+                <label class="form-label text-light fw-semibold">Features List (One feature per line)</label>
                 <textarea
                   v-model="planForm.featuresText"
-                  rows="4"
+                  rows="5"
                   class="form-control idp-input"
-                  placeholder="Enter features (one per line)&#10;e.g. Full Client Profile Management&#10;Unlimited Purchases & Sales Rates&#10;Submissions Tracker"
+                  placeholder="Enter features (one per line)&#10;e.g. Full Client Profile Management&#10;Unlimited Purchases & Bill of Entry Import&#10;Automated Mushak 9.1 & 6.1 Generation&#10;Dedicated Submissions Tracker"
                 ></textarea>
               </div>
 
-              <div class="d-flex gap-2">
-                <button type="button" class="btn btn-secondary flex-grow-1" @click="showPlanModal = false">
+              <div class="d-flex gap-3 pt-3 border-top border-secondary border-opacity-50">
+                <button type="button" class="btn btn-outline-secondary px-4 py-2 fw-semibold" @click="cancelForm">
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  class="btn btn-idp-primary flex-grow-1"
+                  class="btn btn-idp-primary flex-grow-1 py-2 fw-bold"
                   :disabled="isSubmittingPlan"
                 >
-                  {{ isSubmittingPlan ? 'Saving Plan...' : (editingPlanId ? 'Update Plan' : 'Create Plan') }}
+                  <span v-if="isSubmittingPlan" class="spinner-border spinner-border-sm me-2"></span>
+                  <i v-else class="bi bi-check2-circle me-1"></i>
+                  {{ isSubmittingPlan ? 'Saving Plan...' : (editingPlanId ? 'Update Subscription Plan' : 'Save & Publish Plan') }}
                 </button>
               </div>
             </form>
           </div>
         </div>
+
+        <!-- Live Preview Column -->
+        <div class="col-lg-5">
+          <div class="idp-card p-4 sticky-top" style="top: 1rem;">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <i class="bi bi-eye text-primary"></i>
+              <h6 class="text-white fw-bold mb-0">Live Plan Preview</h6>
+            </div>
+            <p class="text-muted small mb-3">This is how your subscription package will appear to users during checkout:</p>
+
+            <div class="p-4 bg-dark bg-opacity-75 border border-primary border-opacity-50 rounded-3 shadow">
+              <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                  <h5 class="text-white fw-bold mb-1">{{ planForm.name || 'Your Plan Name' }}</h5>
+                  <div class="d-flex flex-wrap gap-1 mt-2">
+                    <span class="badge bg-info bg-opacity-25 text-info border border-info small">
+                      Max {{ planForm.maxUsers || 1 }} Users
+                    </span>
+                    <span class="badge bg-primary bg-opacity-25 text-primary border border-primary small">
+                      Max {{ planForm.maxClients || 50 }} Clients
+                    </span>
+                    <span class="badge bg-secondary bg-opacity-25 text-light border border-secondary small">
+                      <i class="bi bi-hdd me-1"></i>{{ (planForm.maxStorageMB || 1024) >= 1024 ? ((planForm.maxStorageMB || 1024) / 1024).toFixed((planForm.maxStorageMB || 1024) % 1024 === 0 ? 0 : 1) + ' GB' : (planForm.maxStorageMB || 1024) + ' MB' }}
+                    </span>
+                    <span v-if="planForm.hasAccounts" class="badge bg-success bg-opacity-25 text-success border border-success small">
+                      <i class="bi bi-shield-check me-1"></i>Accounts
+                    </span>
+                    <span v-else class="badge bg-warning bg-opacity-25 text-warning border border-warning small">
+                      <i class="bi bi-lock me-1"></i>No Accounts
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-flex align-items-baseline gap-2 mb-2">
+                <div class="text-success fw-bold font-monospace fs-4">৳ {{ planForm.rateMonthly ?? 0 }}</div>
+                <div class="text-muted small">/ month</div>
+              </div>
+
+              <div class="text-muted small mb-3 pb-3 border-bottom border-secondary border-opacity-50">
+                Yearly Rate: <strong class="text-light">৳ {{ planForm.rateYearly ?? 0 }}</strong>
+                <span v-if="planForm.yearlyDiscountPercent > 0" class="badge bg-success bg-opacity-25 text-success ms-1">
+                  Save {{ planForm.yearlyDiscountPercent }}%
+                </span>
+              </div>
+
+              <div class="mb-2">
+                <div class="text-muted small fw-semibold mb-2">Features Included:</div>
+                <ul class="list-unstyled mb-0 small">
+                  <li 
+                    v-for="(f, i) in planForm.featuresText.split('\n').map(s => s.trim()).filter(Boolean)" 
+                    :key="i" 
+                    class="text-light mb-1.5 d-flex align-items-center gap-2"
+                  >
+                    <i class="bi bi-check2-circle text-primary flex-shrink-0"></i> <span>{{ f }}</span>
+                  </li>
+                  <li v-if="!planForm.featuresText.trim()" class="text-muted fst-italic">
+                    Type features in the form to preview them here...
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: BKASH GATEWAY SETTINGS -->
+    <div v-else-if="activeTab === 'gateway'">
+      <div class="idp-card p-4" style="max-width: 600px;">
+        <h5 class="text-white fw-bold mb-3 d-flex align-items-center gap-2">
+          <i class="bi bi-wallet2 text-danger"></i> bKash Payment Gateway Configuration
+        </h5>
+        <p class="text-muted small mb-4">
+          Live configuration for direct SaaS tenant signups with manual bKash Transaction ID (TrxID) verification.
+        </p>
+
+        <div class="mb-3">
+          <label class="form-label text-light fw-semibold">bKash Merchant / Agent / Personal No</label>
+          <input
+            v-model="paymentSettings.bkashNumber"
+            type="text"
+            class="form-control idp-input font-monospace"
+            placeholder="01XXXXXXXXX"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label text-light fw-semibold">bKash Send Money / Fee (%)</label>
+          <input
+            v-model.number="paymentSettings.bkashCharge"
+            type="number"
+            step="0.1"
+            class="form-control idp-input font-monospace"
+          />
+          <div class="text-muted small mt-1">Default 1.8% added automatically at registration checkout.</div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label text-light fw-semibold">Nagad Number (Optional)</label>
+          <input
+            v-model="paymentSettings.nagadNumber"
+            type="text"
+            class="form-control idp-input font-monospace"
+            placeholder="01XXXXXXXXX"
+          />
+        </div>
+
+        <button
+          class="btn btn-idp-primary w-100 py-2.5 fw-bold"
+          :disabled="isSaving"
+          @click="handleSavePaymentConfig"
+        >
+          <span v-if="isSaving" class="spinner-border spinner-border-sm me-2"></span>
+          {{ isSaving ? 'Saving to Database...' : 'Save Payment Config' }}
+        </button>
       </div>
     </div>
   </div>
