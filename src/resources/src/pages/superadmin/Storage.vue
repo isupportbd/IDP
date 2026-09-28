@@ -9,11 +9,13 @@ interface TenantStorageItem {
   mobile?: string;
   status: string;
   rank: number;
+  planName?: string;
+  maxStorageMB?: number;
+  usagePercent?: number;
   clientsCount: number;
   submissionsCount: number;
   billsCount: number;
   totalRecords: number;
-  sharePercent: number;
   estimatedKB: number;
   estimatedMB: number;
   createdAt?: string;
@@ -164,7 +166,7 @@ onMounted(fetchStorageStats);
             <i class="bi bi-bar-chart-steps text-primary"></i> Tenant Uploads & Storage Usage Breakdown
           </h6>
           <div class="text-muted small">
-            Ranked by total database records and storage footprint. Auto-sorted every day after 12:00 AM.
+            Ranked by total database records and storage footprint against plan quota. Auto-sorted daily after 12:00 AM.
           </div>
         </div>
 
@@ -193,19 +195,18 @@ onMounted(fetchStorageStats);
               <th class="text-center">SUBMISSIONS</th>
               <th class="text-center">INVOICES</th>
               <th class="text-center">TOTAL RECORDS</th>
-              <th>ESTIMATED USAGE</th>
-              <th class="text-center">PLATFORM SHARE</th>
+              <th style="min-width: 200px;">ESTIMATED USAGE</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="isLoading">
-              <td colspan="8" class="text-center py-5 text-muted">
+              <td colspan="7" class="text-center py-5 text-muted">
                 <span class="spinner-border spinner-border-sm text-primary me-2"></span>
                 Calculating tenant storage usage and daily ranking...
               </td>
             </tr>
             <tr v-else-if="filteredBreakdown.length === 0">
-              <td colspan="8" class="text-center py-5 text-muted">
+              <td colspan="7" class="text-center py-5 text-muted">
                 No tenant data found matching your query.
               </td>
             </tr>
@@ -216,7 +217,12 @@ onMounted(fetchStorageStats);
                 </span>
               </td>
               <td>
-                <div class="fw-bold text-white fs-6">{{ t.name }}</div>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="fw-bold text-white fs-6">{{ t.name }}</div>
+                  <span class="badge bg-dark border border-secondary text-primary font-monospace small px-2">
+                    {{ t.planName || 'Plan' }}
+                  </span>
+                </div>
                 <div class="text-muted small font-monospace">{{ t.email }} · Tenant #{{ t.id }}</div>
               </td>
               <td class="text-center">
@@ -234,28 +240,25 @@ onMounted(fetchStorageStats);
                 <span class="text-white fw-bold font-monospace">{{ t.totalRecords?.toLocaleString() }}</span>
               </td>
               <td>
-                <div class="d-flex flex-column gap-1" style="min-width: 140px;">
+                <div class="d-flex flex-column gap-1">
                   <div class="d-flex justify-content-between align-items-center small">
-                    <span class="text-white fw-bold font-monospace">{{ t.estimatedMB > 0 ? t.estimatedMB + ' MB' : t.estimatedKB + ' KB' }}</span>
-                    <span class="text-muted">{{ t.sharePercent }}%</span>
+                    <span class="text-white fw-bold font-monospace">
+                      {{ t.estimatedMB > 0 ? t.estimatedMB + ' MB' : t.estimatedKB + ' KB' }}
+                      <span class="text-muted fw-normal">/ {{ t.maxStorageMB || 1024 }} MB</span>
+                    </span>
+                    <span class="text-muted small font-monospace">
+                      {{ (t.usagePercent || 0) < 0.01 ? '<0.01%' : t.usagePercent + '%' }}
+                    </span>
                   </div>
                   <div class="progress" style="height: 6px; background-color: #2d3748;">
                     <div
                       class="progress-bar"
-                      :class="t.rank === 1 ? 'bg-primary' : t.rank === 2 ? 'bg-info' : 'bg-secondary'"
+                      :class="(t.usagePercent || 0) > 90 ? 'bg-danger' : (t.usagePercent || 0) > 75 ? 'bg-warning' : 'bg-primary'"
                       role="progressbar"
-                      :style="{ width: `${Math.max(t.sharePercent, 4)}%` }"
+                      :style="{ width: `${Math.max(t.usagePercent || 0, 1)}%` }"
                     ></div>
                   </div>
                 </div>
-              </td>
-              <td class="text-center">
-                <span
-                  class="badge px-2.5 py-1 font-monospace"
-                  :class="t.sharePercent >= 40 ? 'bg-primary bg-opacity-25 text-primary border border-primary' : 'bg-dark text-muted border border-secondary'"
-                >
-                  {{ t.sharePercent }}% Total
-                </span>
               </td>
             </tr>
           </tbody>

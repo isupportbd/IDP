@@ -13,15 +13,15 @@ const isSuperAdmin = computed(() => {
 const hasAccountsAccess = computed(() => {
   if (isSuperAdmin.value) return true;
   const user = authStore.user as any;
-  if (!user) return true;
+  if (!user) return false;
   if (user.plan) {
-    return user.plan.hasAccounts !== false;
+    return user.plan.hasAccounts === true;
   }
-  return true;
+  return false;
 });
 
 const hasAnyAdminTools = computed(() => {
-  return isTenantAdmin() || (hasAccountsAccess.value && canAccessModule('billing')) || canAccessModule('settings');
+  return isTenantAdmin() || canAccessModule('settings') || canAccessModule('billing');
 });
 </script>
 
@@ -198,7 +198,7 @@ const hasAnyAdminTools = computed(() => {
 
         <div class="dashboard-cards-grid">
           <!-- 1. User & Staff (Tenant Admin only) -->
-          <router-link v-if="isTenantAdmin()" to="/admin/users" target="_blank" class="dash-card">
+          <router-link v-if="isTenantAdmin()" to="/admin/users" class="dash-card">
             <div class="dash-card-icon text-primary">
               <i class="bi bi-people"></i>
             </div>
@@ -216,27 +216,25 @@ const hasAnyAdminTools = computed(() => {
           </router-link>
 
           <!-- 3. Billing & Invoice -->
-          <template v-if="canAccessModule('billing')">
-            <router-link v-if="hasAccountsAccess" to="/admin/billing" class="dash-card">
-              <div class="dash-card-icon text-warning">
-                <i class="bi bi-receipt-cutoff"></i>
-              </div>
-              <h5 class="dash-card-title">Billing & Invoice</h5>
-              <p class="dash-card-desc">Client invoices, payments, collections, and dues tracking.</p>
-            </router-link>
-            <div v-else class="dash-card opacity-75 position-relative" style="cursor: not-allowed;" title="Upgrade plan to access Billing & Accounts">
-              <!-- Top-right corner lock badge -->
-              <span class="position-absolute top-0 end-0 m-3 badge bg-warning text-dark shadow-sm d-inline-flex align-items-center gap-1" style="font-size: 0.72rem;">
-                <i class="bi bi-lock-fill"></i>
-                <span>Locked</span>
-              </span>
-              <div class="dash-card-icon text-warning">
-                <i class="bi bi-receipt-cutoff"></i>
-              </div>
-              <h5 class="dash-card-title text-light">Billing & Invoice</h5>
-              <p class="dash-card-desc text-muted">Client invoices, payments, collections, and dues tracking.</p>
+          <router-link v-if="hasAccountsAccess && canAccessModule('billing')" to="/admin/billing" class="dash-card">
+            <div class="dash-card-icon text-warning">
+              <i class="bi bi-receipt-cutoff"></i>
             </div>
-          </template>
+            <h5 class="dash-card-title">Billing & Invoice</h5>
+            <p class="dash-card-desc">Client invoices, payments, collections, and dues tracking.</p>
+          </router-link>
+          <div v-else class="dash-card opacity-75 position-relative" style="cursor: not-allowed;" title="Upgrade plan to access Billing & Accounts">
+            <!-- Top-right corner lock badge -->
+            <span class="position-absolute top-0 end-0 m-3 badge bg-secondary text-white border border-secondary shadow-sm d-inline-flex align-items-center gap-1" style="font-size: 0.72rem;">
+              <i class="bi bi-lock-fill text-warning"></i>
+              <span>Locked</span>
+            </span>
+            <div class="dash-card-icon text-warning opacity-75">
+              <i class="bi bi-receipt-cutoff"></i>
+            </div>
+            <h5 class="dash-card-title text-light">Billing & Invoice</h5>
+            <p class="dash-card-desc text-muted">Client invoices, payments, collections, and dues tracking.</p>
+          </div>
 
           <!-- 4. Firm Settings -->
           <router-link v-if="canAccessModule('settings')" to="/admin/settings" class="dash-card">

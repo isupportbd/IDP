@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import axios from "axios";
 import { useAuthStore } from "@/stores/auth";
+import { useToast } from "@/composables/useToast";
+
+const toast = useToast();
 
 interface OrgUser {
   id: number;
@@ -97,6 +100,7 @@ const clearAllModules = () => {
 // Summary Stats
 const totalUsersCount = computed(() => users.value.length);
 const activeUsersCount = computed(() => users.value.filter((u) => u.status === "active").length);
+const activeSubUsersCount = computed(() => users.value.filter((u) => u.role !== "admin" && u.status === "active").length);
 const onlineNowCount = computed(() => {
   return users.value.filter((u) => u.lastActive === "Just now" || u.lastActive?.includes("min")).length;
 });
@@ -164,6 +168,9 @@ const fetchUsers = async () => {
 };
 
 // Open Add Modal
+const DEFAULT_USER_PERMISSIONS = ["activity_filter", "submissions", "sales_rates", "reports"];
+
+// Open Add Modal
 const openAddModal = () => {
   isEditing.value = false;
   formError.value = "";
@@ -175,7 +182,7 @@ const openAddModal = () => {
     password: "",
     role: "user",
     status: "active",
-    permissions: availableModules.value.map((m) => m.id)
+    permissions: [...DEFAULT_USER_PERMISSIONS]
   };
   showModal.value = true;
 };
@@ -192,7 +199,7 @@ const openEditModal = (u: OrgUser) => {
     password: "",
     role: u.role,
     status: u.status,
-    permissions: u.permissions && u.permissions.length > 0 ? [...u.permissions] : availableModules.value.map((m) => m.id)
+    permissions: Array.isArray(u.permissions) ? [...u.permissions] : [...DEFAULT_USER_PERMISSIONS]
   };
   showModal.value = true;
 };
@@ -263,7 +270,7 @@ const handleSaveUser = async () => {
 // Quick Reset Password
 const handleResetPassword = async () => {
   if (!passwordForm.value.newPassword || passwordForm.value.newPassword.length < 6) {
-    formError.value = "Password must be at least 6 characters long.";
+    toast.warning("Password must be at least 6 characters long.");
     return;
   }
   isSubmitting.value = true;
@@ -272,9 +279,9 @@ const handleResetPassword = async () => {
       newPassword: passwordForm.value.newPassword
     });
     showPasswordModal.value = false;
-    alert(`Password updated successfully for ${passwordForm.value.userName}`);
+    toast.success(`Password updated successfully for ${passwordForm.value.userName}`);
   } catch (e: any) {
-    formError.value = e.response?.data?.message || "Failed to reset password.";
+    toast.error(e.response?.data?.message || "Failed to reset password.");
   } finally {
     isSubmitting.value = false;
   }
@@ -286,23 +293,25 @@ const toggleUserStatus = async (u: OrgUser) => {
   try {
     await axios.patch(`/api/users/${u.id}/status`, { status: targetStatus });
     u.status = targetStatus;
+    toast.success(`User ${u.name} is now ${targetStatus}.`);
   } catch (e: any) {
-    alert(e.response?.data?.message || "Failed to update user status.");
+    toast.error(e.response?.data?.message || "Failed to update user status.");
   }
 };
 
 // Delete User
 const handleDeleteUser = async (u: OrgUser) => {
   if (u.role === "admin" && users.value.filter((x) => x.role === "admin").length <= 1) {
-    alert("You cannot delete the primary Organization Admin.");
+    toast.warning("You cannot delete the primary Organization Admin.");
     return;
   }
   if (!confirm(`Are you sure you want to remove user "${u.name}"?`)) return;
   try {
     await axios.delete(`/api/users/${u.id}`);
     await fetchUsers();
+    toast.success(`User "${u.name}" removed successfully.`);
   } catch (e: any) {
-    alert(e.response?.data?.message || "Failed to delete user.");
+    toast.error(e.response?.data?.message || "Failed to delete user.");
   }
 };
 
@@ -382,15 +391,15 @@ onMounted(async () => {
         <div class="summary-card">
           <div class="d-flex justify-content-between align-items-center mb-1">
             <div class="d-flex align-items-baseline gap-2">
-              <span class="card-label text-muted mb-0">Plan Quota:</span>
-              <span class="card-value text-info">{{ totalUsersCount }} / {{ maxPlanUsers }}</span>
+              <span class="card-label text-muted mb-0">Sub-User Quota:</span>
+              <span class="card-value text-info">{{ activeSubUsersCount }} / {{ maxPlanUsers }}</span>
             </div>
             <div class="card-icon-wrap icon-gray">
               <i class="bi bi-shield-lock"></i>
             </div>
           </div>
           <div class="card-sub text-muted">
-            <i class="bi bi-info-circle me-1"></i> {{ maxPlanUsers - totalUsersCount }} user seats available in current plan
+            <i class="bi bi-info-circle me-1"></i> {{ Math.max(0, maxPlanUsers - activeSubUsersCount) }} staff seats available in current plan
           </div>
         </div>
       </div>

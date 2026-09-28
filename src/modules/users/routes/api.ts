@@ -1,5 +1,6 @@
 import { createRoute, createRouter, HttpStatusCodes, jsonContent, z } from "@/framework/facade.js";
 import { authMiddleware } from "@/middlewares/auth-middleware.js";
+import { subscriptionMiddleware } from "@/middlewares/subscription-middleware.js";
 import {
   listUsers,
   createUser,
@@ -97,7 +98,7 @@ const deleteUserRoute = createRoute({
 });
 
 export default createRouter()
-  .group(authMiddleware)
+  .group(authMiddleware, subscriptionMiddleware)
   .api(listUsersRoute, [], listUsers)
   .api(createUserRoute, [], createUser)
   .api(updateUserRoute, [], updateUser)

@@ -10,6 +10,10 @@ import { roles } from "@/modules/auth/database/models/role.js";
 import { companySettings } from "@/modules/firm/database/models/company_settings.js";
 import { plans } from "@/modules/superadmin/database/models/plans.js";
 import { purchases } from "../database/models/purchases.js";
+import { salesRates } from "../database/models/sales_rates.js";
+import { vatSubmissions } from "../database/models/vat_submissions.js";
+import { bills } from "@/modules/billing/database/models/bills.js";
+import { collections } from "@/modules/billing/database/models/collections.js";
 import { globalItems } from "@/modules/superadmin/database/models/global_items.js";
 
 // ── 1. LIST CLIENTS WITH FILTERS & PAGINATION ────────────────────────
@@ -21,7 +25,26 @@ export const listClients: Handler = async (c: any) => {
     const limit = query.limit || 50;
     const offset = (page - 1) * limit;
 
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId: number | null = null;
+    let isSuperAdmin = false;
+
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
+    }
+
     const conditions: any[] = [];
+
+    if (!isSuperAdmin && tenantAdminId) {
+      conditions.push(eq(clients.createdBy, tenantAdminId));
+    }
 
     if (query.search && query.search.trim()) {
       const term = `%${query.search.trim()}%`;
@@ -146,6 +169,26 @@ export const listClients: Handler = async (c: any) => {
 export const getClientById: Handler = async (c: any) => {
   try {
     const { id } = c.req.valid("param");
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId: number | null = null;
+    let isSuperAdmin = false;
+
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
+    }
+
+    const whereConditions = [eq(clients.id, id)];
+    if (!isSuperAdmin && tenantAdminId) {
+      whereConditions.push(eq(clients.createdBy, tenantAdminId));
+    }
+
     const row = (
       await db
         .select({
@@ -175,7 +218,7 @@ export const getClientById: Handler = async (c: any) => {
         .from(clients)
         .leftJoin(customerTypes, eq(clients.customerTypeId, customerTypes.id))
         .leftJoin(clientReferences, eq(clients.referenceId, clientReferences.id))
-        .where(eq(clients.id, id))
+        .where(and(...whereConditions))
         .limit(1)
     )[0];
 
@@ -208,41 +251,50 @@ export const getClientById: Handler = async (c: any) => {
   }
 };
 
-// ── 3. CREATE CLIENT ─────────────────────────────────────────────────
+// ── 3. CREATE / BIND CLIENT (GLOBAL BIN ARCHITECTURE) ────────────────
 
 export const createClient: Handler = async (c: any) => {
   try {
     const body = c.req.valid("json");
     const trimmedBin = body.binNumber?.trim();
 
-    // 1. Check Tenant Subscription Plan Client Limit
-    const auth = c.get("auth");
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId = 1;
+    let isSuperAdmin = false;
+
     if (auth?.id) {
       const currentUser = await db.query.users.findFirst({
-        where: eq(users.id, auth.id),
+        where: eq(users.id, Number(auth.id)),
         with: { role: true }
       });
-      const isSuperAdmin = currentUser?.role?.name?.toLowerCase() === "superadmin";
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
+    }
 
-      if (!isSuperAdmin && currentUser) {
-        const tenantAdminId = currentUser.adminId || currentUser.id;
-        const tenantAdmin = await db.query.users.findFirst({
-          where: eq(users.id, tenantAdminId)
-        });
+    // 1. Check Tenant Subscription Plan Client Limit (counting ACTIVE clients)
+    if (!isSuperAdmin) {
+      const tenantAdmin = await db.query.users.findFirst({
+        where: eq(users.id, tenantAdminId)
+      });
 
-        if (tenantAdmin?.planId) {
-          const [plan] = await db.select().from(plans).where(eq(plans.id, tenantAdmin.planId));
-          const maxClientsAllowed = plan?.maxClients ?? 50;
+      if (tenantAdmin?.planId) {
+        const [plan] = await db.select().from(plans).where(eq(plans.id, tenantAdmin.planId));
+        const maxClientsAllowed = plan?.maxClients;
 
+        if (maxClientsAllowed && maxClientsAllowed > 0) {
           const [clientCountResult] = await db
             .select({ count: sql<number>`count(*)::int` })
-            .from(clients);
+            .from(clients)
+            .where(and(eq(clients.createdBy, tenantAdminId), eq(clients.isActive, true)));
 
           const currentCount = clientCountResult?.count || 0;
           if (currentCount >= maxClientsAllowed) {
             return c.json(
               {
-                message: `Client limit reached (${currentCount}/${maxClientsAllowed}) for your current plan (${plan?.name || "Subscription Plan"}). Please upgrade your plan to add more client organizations.`
+                success: false,
+                message: `Active client limit reached (${currentCount}/${maxClientsAllowed}) for your current plan (${plan?.name || "Subscription Plan"}). Please inactivate/release an inactive client or upgrade your plan to add more client organizations.`
               },
               HttpStatusCodes.FORBIDDEN
             );
@@ -251,19 +303,87 @@ export const createClient: Handler = async (c: any) => {
       }
     }
 
-    // Check Settings for BIN Uniqueness enforcement
-    const settings = (await db.select().from(companySettings).limit(1))[0];
-    const enforceBin = settings?.binUniqueEnforcement ?? true;
-
-    if (trimmedBin && enforceBin) {
-      const existingBin = (
-        await db.select({ id: clients.id }).from(clients).where(eq(clients.binNumber, trimmedBin)).limit(1)
+    // 2. Global BIN Uniqueness & Release-and-Bind Check
+    if (trimmedBin) {
+      const existingGlobalClient = (
+        await db
+          .select()
+          .from(clients)
+          .where(eq(clients.binNumber, trimmedBin))
+          .limit(1)
       )[0];
-      if (existingBin) {
-        return c.json({ message: `BIN number "${trimmedBin}" is already registered` }, HttpStatusCodes.CONFLICT);
+
+      if (existingGlobalClient) {
+        // Case A: Client already belongs to THIS admin
+        if (existingGlobalClient.createdBy === tenantAdminId) {
+          return c.json(
+            {
+              message: `BIN number "${trimmedBin}" is already registered in your organization under "${existingGlobalClient.companyName}".`
+            },
+            HttpStatusCodes.CONFLICT
+          );
+        }
+
+        // Case B: Client belongs to another admin AND is STILL ACTIVE (Not Released!)
+        if (existingGlobalClient.isActive) {
+          return c.json(
+            {
+              success: false,
+              message: `এই ক্লায়েন্টটি (BIN: ${trimmedBin}) বর্তমানে অন্য একজন অ্যাডমিনের আন্ডারে সক্রিয় রয়েছে। পূর্ববর্তী অ্যাডমিন সমস্ত বকেয়া বুঝে নিয়ে রিলিজ (Release) না করা পর্যন্ত এই ক্লায়েন্টকে আপনার পোর্টালে যুক্ত বা বাইন্ড করা সম্ভব নয়।`
+            },
+            HttpStatusCodes.CONFLICT
+          );
+        }
+
+        // Case C: Client was RELEASED by previous admin -> BIND TO NEW ADMIN!
+        const [boundClient] = await db
+          .update(clients)
+          .set({
+            companyName: body.companyName?.trim() || existingGlobalClient.companyName,
+            proprietorName: body.proprietorName !== undefined ? (body.proprietorName ? body.proprietorName.trim() : null) : existingGlobalClient.proprietorName,
+            mobile: body.mobile !== undefined ? (body.mobile ? body.mobile.trim() : null) : existingGlobalClient.mobile,
+            alternativeMobile: body.alternativeMobile !== undefined ? (body.alternativeMobile ? body.alternativeMobile.trim() : null) : existingGlobalClient.alternativeMobile,
+            email: body.email !== undefined ? (body.email ? body.email.trim() : null) : existingGlobalClient.email,
+            address: body.address !== undefined ? (body.address ? body.address.trim() : null) : existingGlobalClient.address,
+            tinNumber: body.tinNumber !== undefined ? (body.tinNumber ? body.tinNumber.trim() : null) : existingGlobalClient.tinNumber,
+            tradeLicenseNo: body.tradeLicenseNo !== undefined ? (body.tradeLicenseNo ? body.tradeLicenseNo.trim() : null) : existingGlobalClient.tradeLicenseNo,
+            customerTypeId: body.customerTypeId !== undefined ? body.customerTypeId : null,
+            referenceId: body.referenceId !== undefined ? body.referenceId : null,
+            vatUserId: body.vatUserId !== undefined ? (body.vatUserId ? body.vatUserId.trim() : null) : existingGlobalClient.vatUserId,
+            vatPassword: body.vatPassword !== undefined ? body.vatPassword : existingGlobalClient.vatPassword,
+            vatServiceType: body.vatServiceType || existingGlobalClient.vatServiceType,
+            openingBalance: body.openingBalance !== undefined ? Number(body.openingBalance) : 0,
+            isActive: true, // Activated under new admin
+            createdBy: tenantAdminId, // Transferred to new tenant admin
+            notes: body.notes !== undefined ? (body.notes ? body.notes.trim() : null) : existingGlobalClient.notes,
+            updatedAt: new Date()
+          })
+          .where(eq(clients.id, existingGlobalClient.id))
+          .returning();
+
+        // Reassign managers for new firm
+        await db.delete(clientManagers).where(eq(clientManagers.clientId, boundClient.id));
+        if (body.managerIds && Array.isArray(body.managerIds) && body.managerIds.length > 0) {
+          await db.insert(clientManagers).values(
+            body.managerIds.map((mgrId: number) => ({
+              clientId: boundClient.id,
+              managerId: mgrId
+            }))
+          );
+        }
+
+        return c.json(
+          {
+            message: `Client "${boundClient.companyName}" (BIN: ${trimmedBin}) was released by previous firm and has now been successfully bound to your organization!`,
+            data: boundClient,
+            isTransferred: true
+          },
+          HttpStatusCodes.CREATED
+        );
       }
     }
 
+    // 3. Brand New Client Registration (BIN not in DB)
     const inserted = (
       await db
         .insert(clients)
@@ -284,6 +404,7 @@ export const createClient: Handler = async (c: any) => {
           vatServiceType: body.vatServiceType || "FULL",
           openingBalance: body.openingBalance !== undefined ? Number(body.openingBalance) : 0,
           isActive: body.isActive ?? true,
+          createdBy: tenantAdminId,
           notes: body.notes?.trim() || null
         })
         .returning()
@@ -311,10 +432,29 @@ export const updateClient: Handler = async (c: any) => {
   try {
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId: number | null = null;
+    let isSuperAdmin = false;
 
-    const existing = (await db.select().from(clients).where(eq(clients.id, id)).limit(1))[0];
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
+    }
+
+    const whereConditions = [eq(clients.id, id)];
+    if (!isSuperAdmin && tenantAdminId) {
+      whereConditions.push(eq(clients.createdBy, tenantAdminId));
+    }
+
+    const existing = (await db.select().from(clients).where(and(...whereConditions)).limit(1))[0];
     if (!existing) {
-      return c.json({ message: "Client not found" }, HttpStatusCodes.NOT_FOUND);
+      return c.json({ message: "Client not found or unauthorized" }, HttpStatusCodes.NOT_FOUND);
     }
 
     const trimmedBin = body.binNumber?.trim();
@@ -327,7 +467,7 @@ export const updateClient: Handler = async (c: any) => {
           .limit(1)
       )[0];
       if (duplicateBin) {
-        return c.json({ message: `BIN number "${trimmedBin}" is already used by another client` }, HttpStatusCodes.CONFLICT);
+        return c.json({ message: `BIN number "${trimmedBin}" is already used globally by another registered client.` }, HttpStatusCodes.CONFLICT);
       }
     }
 
@@ -377,16 +517,61 @@ export const updateClient: Handler = async (c: any) => {
   }
 };
 
-// ── 5. TOGGLE CLIENT ACTIVE STATUS ───────────────────────────────────
+// ── 5. TOGGLE CLIENT ACTIVE STATUS (RELEASE / RESTORE) ───────────────
 
 export const toggleClientStatus: Handler = async (c: any) => {
   try {
     const { id } = c.req.valid("param");
     const { isActive } = c.req.valid("json");
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId: number | null = null;
+    let isSuperAdmin = false;
 
-    const existing = (await db.select().from(clients).where(eq(clients.id, id)).limit(1))[0];
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
+    }
+
+    const whereConditions = [eq(clients.id, id)];
+    if (!isSuperAdmin && tenantAdminId) {
+      whereConditions.push(eq(clients.createdBy, tenantAdminId));
+    }
+
+    const existing = (await db.select().from(clients).where(and(...whereConditions)).limit(1))[0];
     if (!existing) {
-      return c.json({ message: "Client not found" }, HttpStatusCodes.NOT_FOUND);
+      return c.json({ message: "Client not found or unauthorized" }, HttpStatusCodes.NOT_FOUND);
+    }
+
+    // If reactivating a released/inactive client, check subscription plan active client limit
+    if (isActive && !existing.isActive && !isSuperAdmin && tenantAdminId) {
+      const tenantAdmin = await db.query.users.findFirst({
+        where: eq(users.id, tenantAdminId)
+      });
+      if (tenantAdmin?.planId) {
+        const [plan] = await db.select().from(plans).where(eq(plans.id, tenantAdmin.planId));
+        if (plan && plan.maxClients && plan.maxClients > 0) {
+          const [activeCountRes] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(clients)
+            .where(and(eq(clients.createdBy, tenantAdminId), eq(clients.isActive, true)));
+
+          const currentActiveCount = activeCountRes?.count || 0;
+          if (currentActiveCount >= plan.maxClients) {
+            return c.json(
+              {
+                message: `Cannot activate client. Active client limit reached (${currentActiveCount}/${plan.maxClients}) for your subscription plan (${plan.name}). Please inactivate another client first or upgrade your plan.`
+              },
+              HttpStatusCodes.FORBIDDEN
+            );
+          }
+        }
+      }
     }
 
     const updated = (
@@ -399,7 +584,7 @@ export const toggleClientStatus: Handler = async (c: any) => {
 
     return c.json(
       {
-        message: `Client ${isActive ? "activated" : "deactivated"} successfully`,
+        message: `Client ${isActive ? "activated / restored" : "deactivated / released"} successfully`,
         data: updated
       },
       HttpStatusCodes.OK
@@ -409,48 +594,166 @@ export const toggleClientStatus: Handler = async (c: any) => {
   }
 };
 
-// ── 6. DELETE CLIENT ─────────────────────────────────────────────────
+// ── 6. DELETE CLIENT (AUDIT & COMPLIANCE SAFEGUARD) ───────────────────
 
 export const deleteClient: Handler = async (c: any) => {
   try {
     const { id } = c.req.valid("param");
-    const existing = (await db.select().from(clients).where(eq(clients.id, id)).limit(1))[0];
-    if (!existing) {
-      return c.json({ message: "Client not found" }, HttpStatusCodes.NOT_FOUND);
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId: number | null = null;
+    let isSuperAdmin = false;
+
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
     }
 
+    const whereConditions = [eq(clients.id, id)];
+    if (!isSuperAdmin && tenantAdminId) {
+      whereConditions.push(eq(clients.createdBy, tenantAdminId));
+    }
+
+    const existing = (await db.select().from(clients).where(and(...whereConditions)).limit(1))[0];
+    if (!existing) {
+      return c.json({ message: "Client not found or unauthorized" }, HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Check for existing accounting & VAT transactions
+    const [billsCountRes] = await db.select({ count: sql<number>`count(*)::int` }).from(bills).where(eq(bills.clientId, id));
+    const [collectionsCountRes] = await db.select({ count: sql<number>`count(*)::int` }).from(collections).where(eq(collections.clientId, id));
+    const [vatCountRes] = await db.select({ count: sql<number>`count(*)::int` }).from(vatSubmissions).where(eq(vatSubmissions.clientId, id));
+    const [purchasesCountRes] = await db.select({ count: sql<number>`count(*)::int` }).from(purchases).where(eq(purchases.clientId, id));
+    const [ratesCountRes] = await db.select({ count: sql<number>`count(*)::int` }).from(salesRates).where(eq(salesRates.clientId, id));
+
+    const totalTransactions =
+      (billsCountRes?.count || 0) +
+      (collectionsCountRes?.count || 0) +
+      (vatCountRes?.count || 0) +
+      (purchasesCountRes?.count || 0) +
+      (ratesCountRes?.count || 0);
+
+    if (totalTransactions > 0) {
+      return c.json(
+        {
+          success: false,
+          message: `Cannot delete "${existing.companyName}" because this client has ${totalTransactions} existing accounting & tax records (bills, payments, purchases, or VAT submissions). To preserve audit history and ledger balance, please Deactivate / Release the client instead.`
+        },
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    // If zero transactions exist, safe to delete manager assignments and remove client record
+    await db.delete(clientManagers).where(eq(clientManagers.clientId, id));
     await db.delete(clients).where(eq(clients.id, id));
-    return c.json({ message: "Client deleted successfully" }, HttpStatusCodes.OK);
+
+    return c.json({ message: "Client deleted successfully", success: true }, HttpStatusCodes.OK);
   } catch (err: any) {
     return c.json({ message: err.message || "Failed to delete client" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
 };
 
-// ── 7. VALIDATION: BIN UNIQUENESS CHECK ──────────────────────────────
+// ── 7. VALIDATION: GLOBAL BIN UNIQUENESS & BIND STATUS CHECK ─────────
 
 export const checkBinUnique: Handler = async (c: any) => {
   try {
     const { bin, excludeId } = c.req.valid("json");
-    const conditions = [eq(clients.binNumber, bin.trim())];
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId: number | null = null;
+    let isSuperAdmin = false;
+
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
+    }
+
+    const trimmedBin = bin.trim();
+    const conditions = [eq(clients.binNumber, trimmedBin)];
     if (excludeId) {
       conditions.push(ne(clients.id, excludeId));
     }
 
     const existing = (
       await db
-        .select({ id: clients.id, companyName: clients.companyName })
+        .select({
+          id: clients.id,
+          companyName: clients.companyName,
+          proprietorName: clients.proprietorName,
+          mobile: clients.mobile,
+          email: clients.email,
+          address: clients.address,
+          binNumber: clients.binNumber,
+          tinNumber: clients.tinNumber,
+          tradeLicenseNo: clients.tradeLicenseNo,
+          customerTypeId: clients.customerTypeId,
+          referenceId: clients.referenceId,
+          vatUserId: clients.vatUserId,
+          vatServiceType: clients.vatServiceType,
+          isActive: clients.isActive,
+          createdBy: clients.createdBy
+        })
         .from(clients)
         .where(and(...conditions))
         .limit(1)
     )[0];
 
-    return c.json(
-      {
-        unique: !existing,
-        existingClient: existing || null
-      },
-      HttpStatusCodes.OK
-    );
+    if (!existing) {
+      return c.json(
+        {
+          unique: true,
+          status: "AVAILABLE",
+          message: "BIN is completely new and available for registration."
+        },
+        HttpStatusCodes.OK
+      );
+    }
+
+    if (existing.createdBy === tenantAdminId) {
+      return c.json(
+        {
+          unique: false,
+          status: "ALREADY_EXISTS_SAME_FIRM",
+          existingClient: existing,
+          message: `This BIN is already registered in your organization under "${existing.companyName}".`
+        },
+        HttpStatusCodes.OK
+      );
+    }
+
+    if (existing.isActive) {
+      // Active under another firm -> LOCKED / DUES PROTECTION!
+      return c.json(
+        {
+          unique: false,
+          status: "LOCKED_BY_OTHER_FIRM",
+          existingClient: { companyName: existing.companyName, binNumber: existing.binNumber },
+          message: `এই BIN (${trimmedBin}) বর্তমানে অন্য একজন অ্যাডমিনের আন্ডারে সক্রিয় রয়েছে। পূর্ববর্তী অ্যাডমিন থেকে সমস্ত বকেয়া নিষ্পত্তি ও রিলিজ (Release) ছাড়া আপনি একে বাইন্ড করতে পারবেন না।`
+        },
+        HttpStatusCodes.OK
+      );
+    } else {
+      // Released by previous firm -> READY TO BIND!
+      return c.json(
+        {
+          unique: true,
+          status: "RELEASED_AVAILABLE_TO_BIND",
+          existingClient: existing,
+          message: `এই ক্লায়েন্টটি পূর্ববর্তী অ্যাডমিন কর্তৃক রিলিজ (Released) করা হয়েছে। আপনি তথ্য পূরণ করে ক্লায়েন্টটিকে আপনার ফার্মের সাথে Bind করতে পারবেন।`
+        },
+        HttpStatusCodes.OK
+      );
+    }
   } catch (err: any) {
     return c.json({ message: err.message || "Failed to check BIN" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
@@ -652,12 +955,47 @@ export const bulkCreateClients: Handler = async (c: any) => {
 
     const auth = c.get("auth") || c.get("user");
     let tenantAdminId = 1;
+    let isSuperAdmin = false;
+    let tenantAdmin: any = null;
+
     if (auth?.id) {
       const currentUser = await db.query.users.findFirst({
-        where: eq(users.id, Number(auth.id))
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
       });
       if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
         tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+        tenantAdmin = currentUser.adminId
+          ? await db.query.users.findFirst({ where: eq(users.id, tenantAdminId) })
+          : currentUser;
+      }
+    }
+
+    // Check Plan Client Limit for Bulk Upload
+    if (!isSuperAdmin && tenantAdmin?.planId) {
+      const [plan] = await db.select().from(plans).where(eq(plans.id, tenantAdmin.planId));
+      const maxClientsAllowed = plan?.maxClients;
+
+      if (maxClientsAllowed && maxClientsAllowed > 0) {
+        const [clientCountResult] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(clients)
+          .where(and(eq(clients.createdBy, tenantAdminId), eq(clients.isActive, true)));
+
+        const currentCount = clientCountResult?.count || 0;
+        const validClientsToUpload = rawClients.filter((item: any) => (item.companyName?.trim() || item.name?.trim())).length;
+
+        if (currentCount + validClientsToUpload > maxClientsAllowed) {
+          const remainingSlots = Math.max(0, maxClientsAllowed - currentCount);
+          return c.json(
+            {
+              success: false,
+              message: `Cannot upload ${validClientsToUpload} clients. Your current plan (${plan?.name || "Subscription Plan"}) limit is ${maxClientsAllowed} active clients. You currently have ${currentCount} active clients (Available slots: ${remainingSlots}). Please inactivate unused clients or upgrade your plan.`
+            },
+            HttpStatusCodes.FORBIDDEN
+          );
+        }
       }
     }
 

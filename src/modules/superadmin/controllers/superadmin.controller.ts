@@ -4,6 +4,7 @@ import { roles } from "@/modules/auth/database/models/role.js";
 import { plans } from "@/modules/superadmin/database/models/plans.js";
 import { paymentSettings } from "@/modules/superadmin/database/models/payment_settings.js";
 import { clients } from "@/modules/clients/database/models/clients.js";
+import { purchases } from "@/modules/clients/database/models/purchases.js";
 import { vatSubmissions } from "@/modules/clients/database/models/vat_submissions.js";
 import { bills } from "@/modules/billing/database/models/bills.js";
 import { customerTypes } from "@/modules/services/database/models/customer_types.js";
@@ -16,7 +17,7 @@ import { vatNotes } from "@/modules/superadmin/database/models/vat_notes.js";
 import { unitConversions } from "@/modules/superadmin/database/models/unit_conversions.js";
 import { subscriptionTransactions } from "@/modules/superadmin/database/models/subscription_transactions.js";
 import { serviceUnits } from "@/modules/services/database/models/service_units.js";
-import { eq, desc, asc, and, or, ne, isNotNull, isNull, sql } from "drizzle-orm";
+import { eq, desc, asc, and, or, ne, isNotNull, isNull, sql, inArray } from "drizzle-orm";
 import type { Context } from "hono";
 
 export function notifySettingsUpdated(settingType: string) {
@@ -662,6 +663,10 @@ export async function getStorageStats(c: Context) {
     });
     const superadminRoleId = superadminRole?.id ?? -1;
 
+    // Fetch all plans to map storage quotas
+    const allPlansList = await db.select().from(plans);
+    const plansMap = new Map<number, any>(allPlansList.map((p) => [p.id, p]));
+
     const tenantsList = await db
       .select({
         id: users.id,
@@ -670,16 +675,23 @@ export async function getStorageStats(c: Context) {
         mobile: users.mobile,
         status: users.status,
         planId: users.planId,
+        extraStorageMB: users.extraStorageMB,
         createdAt: users.createdAt
       })
       .from(users)
       .where(and(ne(users.status, "pending"), ne(users.roleId, superadminRoleId)))
       .orderBy(desc(users.createdAt));
 
-    let grandTotalTenantRecords = 0;
-
     const tenantStatsRaw = await Promise.all(
       tenantsList.map(async (t) => {
+        // Count purchases created by or associated with tenant
+        const [purchasesCountRes] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(purchases)
+          .where(eq(purchases.adminId, t.id));
+
+        const pCount = Number(purchasesCountRes?.count || 0);
+
         // Count clients created by or associated with tenant
         const [clientCountRes] = await db
           .select({ count: sql<number>`count(*)` })
@@ -704,14 +716,14 @@ export async function getStorageStats(c: Context) {
 
         const bCount = Number(billCountRes?.count || 0);
 
-        // Fallback for demo/primary firm tenant if not explicitly assigned
-        const effectiveClients = cCount > 0 ? cCount : (t.id === 4 ? totalClients : 0);
-        const effectiveSubmissions = sCount > 0 ? sCount : (t.id === 4 ? totalSubmissions : 0);
-        const effectiveBills = bCount > 0 ? bCount : (t.id === 4 ? totalBills : 0);
-
         // Calculate total business records
-        const totalRecords = effectiveClients + effectiveSubmissions + effectiveBills;
-        grandTotalTenantRecords += totalRecords;
+        const totalRecords = pCount + cCount + sCount + bCount;
+
+        const tenantPlan = t.planId ? plansMap.get(t.planId) : null;
+        const baseStorageMB = tenantPlan?.maxStorageMB || 1024;
+        const extraStorageMB = t.extraStorageMB || 0;
+        const maxStorageMB = baseStorageMB + extraStorageMB;
+        const planName = tenantPlan?.name || "Starter";
 
         return {
           id: t.id,
@@ -720,6 +732,10 @@ export async function getStorageStats(c: Context) {
           mobile: t.mobile,
           status: t.status,
           planId: t.planId,
+          planName,
+          baseStorageMB,
+          extraStorageMB,
+          maxStorageMB,
           createdAt: t.createdAt,
           clientsCount: effectiveClients,
           submissionsCount: effectiveSubmissions,
@@ -732,20 +748,17 @@ export async function getStorageStats(c: Context) {
     // Sort by Total Records Descending (Rank #1 at top)
     const sortedTenants = [...tenantStatsRaw].sort((a, b) => b.totalRecords - a.totalRecords);
 
-    // Assign Rank and calculate storage footprint
+    // Assign Rank and calculate storage footprint against plan quota
     const tenantBreakdown = sortedTenants.map((t, index) => {
-      const sharePercent = grandTotalTenantRecords > 0
-        ? Math.round((t.totalRecords / grandTotalTenantRecords) * 100)
-        : 0;
-
-      // Estimated data footprint in KB / MB
-      const estimatedKB = Math.round(t.totalRecords * 3.2); // ~3.2 KB per record with indices and history
+      // Estimated data footprint in KB / MB (~3.2 KB per record with indices and history)
+      const estimatedKB = Math.round(t.totalRecords * 3.2);
       const estimatedMB = Number((estimatedKB / 1024).toFixed(2));
+      const usagePercent = Number(((estimatedMB / t.maxStorageMB) * 100).toFixed(2));
 
       return {
         ...t,
         rank: index + 1,
-        sharePercent,
+        usagePercent,
         estimatedKB,
         estimatedMB
       };
@@ -2062,26 +2075,31 @@ export async function getNotifications(c: Context) {
       .leftJoin(users, eq(subscriptionTransactions.userId, users.id))
       .where(
         and(
-          eq(subscriptionTransactions.type, "deposit"),
+          inArray(subscriptionTransactions.type, ["deposit", "storage_addon"]),
           eq(subscriptionTransactions.status, "pending")
         )
       )
       .orderBy(desc(subscriptionTransactions.createdAt));
 
-    const rechargeNotifs = pendingTransactions.map((tx) => ({
-      id: `tx-${tx.id}`,
-      type: "recharge_request",
-      transactionId: tx.id,
-      userId: tx.userId,
-      userName: tx.userName || "Tenant",
-      userEmail: tx.userEmail || "",
-      grossAmount: tx.grossAmount || tx.paidAmount || 0,
-      gatewayCharge: tx.gatewayCharge || 0,
-      netAmount: tx.netAmount || ((tx.grossAmount || tx.paidAmount || 0) - (tx.gatewayCharge || 0)),
-      trxId: tx.trxId,
-      message: `Wallet Recharge: ${tx.userName || "Tenant"} deposited ৳${tx.paidAmount} (Net: ৳${tx.netAmount}) - bKash TrxID: ${tx.trxId || "N/A"}`,
-      createdAt: tx.createdAt
-    }));
+    const rechargeNotifs = pendingTransactions.map((tx) => {
+      const isStorage = tx.type === "storage_addon";
+      return {
+        id: `tx-${tx.id}`,
+        type: isStorage ? "storage_request" : "recharge_request",
+        transactionId: tx.id,
+        userId: tx.userId,
+        userName: tx.userName || "Tenant",
+        userEmail: tx.userEmail || "",
+        grossAmount: tx.grossAmount || tx.paidAmount || 0,
+        gatewayCharge: tx.gatewayCharge || 0,
+        netAmount: tx.netAmount || ((tx.grossAmount || tx.paidAmount || 0) - (tx.gatewayCharge || 0)),
+        trxId: tx.trxId,
+        message: isStorage
+          ? `Storage Add-on: ${tx.userName || "Tenant"} requested extra storage (Paid: ৳${tx.paidAmount}, Net: ৳${tx.netAmount}) - bKash TrxID: ${tx.trxId || "N/A"}`
+          : `Wallet Recharge: ${tx.userName || "Tenant"} deposited ৳${tx.paidAmount} (Net: ৳${tx.netAmount}) - bKash TrxID: ${tx.trxId || "N/A"}`,
+        createdAt: tx.createdAt
+      };
+    });
 
     return c.json({ success: true, data: [...signupNotifs, ...rechargeNotifs] });
   } catch (error: any) {
@@ -2101,6 +2119,7 @@ export async function getPendingRecharges(c: Context) {
         userEmail: users.email,
         userMobile: users.mobile,
         planId: subscriptionTransactions.planId,
+        type: subscriptionTransactions.type,
         grossAmount: subscriptionTransactions.grossAmount,
         gatewayCharge: subscriptionTransactions.gatewayCharge,
         netAmount: subscriptionTransactions.netAmount,
@@ -2115,7 +2134,7 @@ export async function getPendingRecharges(c: Context) {
       .leftJoin(users, eq(subscriptionTransactions.userId, users.id))
       .where(
         and(
-          eq(subscriptionTransactions.type, "deposit"),
+          inArray(subscriptionTransactions.type, ["deposit", "storage_addon"]),
           eq(subscriptionTransactions.status, "pending")
         )
       )
@@ -2207,23 +2226,32 @@ export async function approveRecharge(c: Context) {
     let finalAdvanceBalance = totalWallet;
     let planActivated = false;
 
-    // If subscription is expired/inactive and total wallet balance now covers plan fee, auto-activate!
-    if (isExpiredOrInactive && totalWallet >= planPrice) {
-      finalAdvanceBalance = totalWallet - planPrice;
-      planActivated = true;
-      newExpDate = new Date();
-      if (isYearly) {
-        newExpDate.setFullYear(newExpDate.getFullYear() + 1);
-      } else {
-        newExpDate.setMonth(newExpDate.getMonth() + 1);
+    let newExtraStorageMB = targetUser.extraStorageMB || 0;
+    if (tx.type === "storage_addon") {
+      // Storage addon payment is dedicated for storage, not added into spendable advance wallet balance
+      finalAdvanceBalance = currentAdvance;
+      const gb = Math.max(1, Math.round(grossAmount / 1000));
+      newExtraStorageMB += (gb * 1024);
+    } else {
+      // If subscription is expired/inactive and total wallet balance now covers plan fee, auto-activate!
+      if (isExpiredOrInactive && totalWallet >= planPrice) {
+        finalAdvanceBalance = totalWallet - planPrice;
+        planActivated = true;
+        newExpDate = new Date();
+        if (isYearly) {
+          newExpDate.setFullYear(newExpDate.getFullYear() + 1);
+        } else {
+          newExpDate.setMonth(newExpDate.getMonth() + 1);
+        }
       }
     }
 
-    // Update User Balance & Expiration
+    // Update User Balance, Storage & Expiration
     await db
       .update(users)
       .set({
         advanceBalance: finalAdvanceBalance,
+        extraStorageMB: newExtraStorageMB,
         expDate: newExpDate,
         status: "active",
         updatedAt: new Date()
@@ -2239,7 +2267,9 @@ export async function approveRecharge(c: Context) {
         gatewayCharge,
         netAmount: netDeposit,
         excessCredit: netDeposit,
-        note: `Recharge approved by SuperAdmin. ${planActivated ? `Plan ${plan?.name || ''} auto-activated.` : ''}`,
+        note: tx.type === "storage_addon" 
+          ? `Storage add-on (+${Math.max(1, Math.round(grossAmount / 1000))} GB) approved by SuperAdmin.`
+          : `Recharge approved by SuperAdmin. ${planActivated ? `Plan ${plan?.name || ''} auto-activated.` : ''}`,
         updatedAt: new Date()
       })
       .where(eq(subscriptionTransactions.id, tx.id));

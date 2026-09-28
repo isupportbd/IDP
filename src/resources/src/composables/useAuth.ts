@@ -57,14 +57,30 @@ export function isTenantAdmin(): boolean {
   return roleName === "admin" || !subject.adminId;
 }
 
+export function hasAccountsAccess(): boolean {
+  const subject = userRef.value as any;
+  if (!subject) return false;
+  // Superadmin is platform owner, not a tenant firm
+  if (hasRole("superadmin")) return false;
+  if (subject.plan) {
+    return subject.plan.hasAccounts === true;
+  }
+  return false;
+}
+
 export function canAccessModule(moduleId: string): boolean {
   const subject = userRef.value as any;
   if (!subject) return false;
 
-  // Superadmin has access to everything
-  if (hasRole("superadmin")) return true;
+  // Superadmin is platform owner and does not operate tenant firm business modules
+  if (hasRole("superadmin")) return false;
 
-  // Tenant Admin (firm owner) has full access to all modules
+  // Billing module strictly requires tenant plan accounts capability
+  if (moduleId === "billing" || moduleId === "accounts") {
+    return hasAccountsAccess();
+  }
+
+  // Tenant Admin (firm owner) has full access to modules available in their plan
   if (isTenantAdmin()) return true;
 
   // Sub-user: check permissions array

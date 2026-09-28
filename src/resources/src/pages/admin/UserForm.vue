@@ -3,21 +3,24 @@ import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import { useAuthStore } from "@/stores/auth";
+import { useToast } from "@/composables/useToast";
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const toast = useToast();
 
 const isEditMode = computed(() => !!route.params.id && route.params.id !== "create");
 const userId = computed(() => Number(route.params.id) || 0);
 
 const hasAccountsAccess = computed(() => {
   const user = authStore.user as any;
-  if (!user) return true;
+  if (!user) return false;
+  if (user.role === "superadmin") return true;
   if (user.plan) {
-    return user.plan.hasAccounts !== false;
+    return user.plan.hasAccounts === true;
   }
-  return true;
+  return false;
 });
 
 const allModulesList = [
@@ -27,19 +30,28 @@ const allModulesList = [
   { id: "bin_formatter", name: "BIN Formatter", icon: "bi-card-checklist", desc: "Batch validate and format 9-13 digit BIN numbers" },
   { id: "purchases", name: "Upload Purchases", icon: "bi-cart3", desc: "Upload and reconcile purchase registers" },
   { id: "sales_rates", name: "Sales Rates", icon: "bi-currency-dollar", desc: "Maintain product sales rates and VAT vatable value" },
-  { id: "reports", name: "Audit & Analytics Reports", icon: "bi-file-earmark-bar-graph", desc: "Generate tenant audit reports and summaries" },
-  { id: "billing", name: "Billing & Invoices", icon: "bi-receipt-cutoff", desc: "Create bills, track payments and ledger", requiresAccounts: true },
+  {
+    id: "reports",
+    name: "Audit & Analytics Reports",
+    icon: "bi-file-earmark-bar-graph",
+    desc: "Generate tenant audit reports and summaries"
+  },
+  {
+    id: "billing",
+    name: "Billing & Invoices",
+    icon: "bi-receipt-cutoff",
+    desc: "Create bills, track payments and ledger",
+    requiresAccounts: true
+  },
   { id: "settings", name: "Firm Settings", icon: "bi-sliders", desc: "Configure organization profile and preferences" }
 ];
 
 const availableModules = computed(() => {
-  return allModulesList.filter(m => !m.requiresAccounts || hasAccountsAccess.value);
+  return allModulesList.filter((m) => !m.requiresAccounts || hasAccountsAccess.value);
 });
 
 const isSubmitting = ref(false);
 const isLoading = ref(false);
-const formError = ref("");
-const formSuccess = ref("");
 const showPassword = ref(false);
 
 const form = ref({
@@ -47,13 +59,13 @@ const form = ref({
   email: "",
   mobile: "",
   password: "",
-  role: "user" as "admin" | "user",
+  role: "user" as "user",
   status: "active" as "active" | "inactive",
   permissions: [] as string[]
 });
 
 const selectAllModules = () => {
-  form.value.permissions = availableModules.value.map(m => m.id);
+  form.value.permissions = availableModules.value.map((m) => m.id);
 };
 
 const clearAllModules = () => {
@@ -62,7 +74,7 @@ const clearAllModules = () => {
 
 const toggleModule = (modId: string) => {
   if (form.value.permissions.includes(modId)) {
-    form.value.permissions = form.value.permissions.filter(id => id !== modId);
+    form.value.permissions = form.value.permissions.filter((id) => id !== modId);
   } else {
     form.value.permissions.push(modId);
   }
@@ -70,11 +82,14 @@ const toggleModule = (modId: string) => {
 
 const isModuleSelected = (modId: string) => form.value.permissions.includes(modId);
 
+// Default sub-user checked modules (Clients, BIN Formatter, Purchases, Settings are unchecked by default)
+const DEFAULT_USER_PERMISSIONS = ["activity_filter", "submissions", "sales_rates", "reports"];
+
 // Fetch user data if in edit mode
 const fetchUserData = async () => {
   if (!isEditMode.value) {
-    // Default create mode: select ALL module permissions by default
-    form.value.permissions = availableModules.value.map(m => m.id);
+    // Default create mode: check only designated routine modules
+    form.value.permissions = [...DEFAULT_USER_PERMISSIONS];
     return;
   }
 
@@ -89,17 +104,15 @@ const fetchUserData = async () => {
         email: target.email || "",
         mobile: target.mobile || "",
         password: "",
-        role: target.role || "user",
+        role: "user",
         status: target.status || "active",
-        permissions: target.permissions && target.permissions.length > 0
-          ? [...target.permissions]
-          : availableModules.value.map(m => m.id)
+        permissions: Array.isArray(target.permissions) ? [...target.permissions] : [...DEFAULT_USER_PERMISSIONS]
       };
     } else {
-      formError.value = "User record not found.";
+      toast.error("User record not found.");
     }
   } catch (err: any) {
-    formError.value = "Failed to load user information.";
+    toast.error("Failed to load user information.");
   } finally {
     isLoading.value = false;
   }
@@ -107,39 +120,32 @@ const fetchUserData = async () => {
 
 // Handle Submit
 const handleSubmit = async () => {
-  formError.value = "";
-  formSuccess.value = "";
-
   if (!form.value.name.trim()) {
-    formError.value = "Full name is required.";
+    toast.warning("Full name is required.");
     return;
   }
   if (!form.value.email.trim() || !form.value.email.includes("@")) {
-    formError.value = "A valid email address is required.";
+    toast.warning("A valid email address is required.");
     return;
   }
   if (!form.value.mobile.trim()) {
-    formError.value = "Mobile number is required.";
+    toast.warning("Mobile number is required.");
     return;
   }
   if (!isEditMode.value && (!form.value.password || form.value.password.length < 6)) {
-    formError.value = "Password is required and must be at least 6 characters long.";
+    toast.warning("Password is required and must be at least 6 characters long.");
     return;
   }
 
   isSubmitting.value = true;
 
-  const assignedPermissions = form.value.role === "admin"
-    ? availableModules.value.map(m => m.id)
-    : form.value.permissions;
-
   const payload: any = {
     name: form.value.name.trim(),
     email: form.value.email.trim(),
     mobile: form.value.mobile.trim(),
-    role: form.value.role,
+    role: "user",
     status: form.value.status,
-    permissions: assignedPermissions
+    permissions: form.value.permissions
   };
 
   if (form.value.password) {
@@ -149,23 +155,23 @@ const handleSubmit = async () => {
   try {
     if (isEditMode.value) {
       await axios.put(`/api/users/${userId.value}`, payload);
-      formSuccess.value = "Sub-user updated successfully!";
+      toast.success("Sub-user updated successfully!");
     } else {
       await axios.post("/api/users", payload);
-      formSuccess.value = "Sub-user created successfully and saved to database!";
+      toast.success("Sub-user created successfully and saved to database!");
     }
 
     setTimeout(() => {
-      // If opened in standalone tab or router
       if (window.opener) {
         try {
           window.opener.location.reload();
         } catch (e) {}
       }
       router.push("/admin/users");
-    }, 1200);
+    }, 1000);
   } catch (err: any) {
-    formError.value = err.response?.data?.message || err.response?.data?.error || "Failed to save user. Please try again.";
+    const errorMsg = err.response?.data?.message || err.response?.data?.error || "Failed to save user. Please try again.";
+    toast.error(errorMsg);
   } finally {
     isSubmitting.value = false;
   }
@@ -188,9 +194,9 @@ onMounted(() => {
           <span class="text-muted small">/</span>
           <span class="text-primary small fw-semibold">{{ isEditMode ? 'Edit User' : 'Create New Sub-User' }}</span>
         </div>
-        <h3 class="text-white fw-bold mb-0">
-          <i class="bi bi-person-plus-fill text-primary me-2"></i>
-          {{ isEditMode ? 'Edit Sub-User Account' : 'Add New Sub-User' }}
+        <h3 class="text-white fw-bold mb-0 d-flex align-items-center gap-2">
+          <i class="bi bi-person-plus-fill text-primary"></i>
+          <span>{{ isEditMode ? 'Edit Sub-User Account' : 'Add New Sub-User' }}</span>
         </h3>
         <span class="text-muted small">
           Configure sub-user credentials, contact info, and granular module permissions
@@ -214,17 +220,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Alert Notifications -->
-    <div v-if="formError" class="alert alert-danger d-flex align-items-center gap-2 mb-4">
-      <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>
-      <div>{{ formError }}</div>
-    </div>
-
-    <div v-if="formSuccess" class="alert alert-success d-flex align-items-center gap-2 mb-4">
-      <i class="bi bi-check-circle-fill flex-shrink-0"></i>
-      <div>{{ formSuccess }}</div>
-    </div>
-
     <!-- Loading State -->
     <div v-if="isLoading" class="text-center py-5">
       <div class="spinner-border text-primary" role="status"></div>
@@ -235,9 +230,9 @@ onMounted(() => {
     <div v-else class="row g-4">
       <!-- Left Column: User Profile & Credentials -->
       <div class="col-lg-5">
-        <div class="card bg-dark border-secondary h-100 shadow-sm">
-          <div class="card-header bg-transparent border-secondary py-3">
-            <h5 class="card-title text-white mb-0 d-flex align-items-center gap-2">
+        <div class="card idp-form-card h-100 shadow-sm">
+          <div class="card-header bg-transparent border-secondary border-opacity-25 py-3">
+            <h5 class="card-title text-white mb-0 d-flex align-items-center gap-2 fs-6 fw-bold">
               <i class="bi bi-person-badge text-primary"></i> Account & Profile Information
             </h5>
           </div>
@@ -245,17 +240,17 @@ onMounted(() => {
           <div class="card-body p-4">
             <!-- Full Name -->
             <div class="mb-3">
-              <label class="form-label text-muted small fw-semibold">
+              <label class="form-label text-muted small fw-semibold mb-1">
                 FULL NAME <span class="text-danger">*</span>
               </label>
-              <div class="input-group">
-                <span class="input-group-text bg-dark border-secondary text-muted">
+              <div class="idp-input-wrap">
+                <span class="input-icon">
                   <i class="bi bi-person"></i>
                 </span>
                 <input
                   v-model="form.name"
                   type="text"
-                  class="form-control bg-dark text-white border-secondary"
+                  class="form-control idp-field"
                   placeholder="e.g. Md. Ashiqur Rahman"
                   required
                 />
@@ -264,17 +259,17 @@ onMounted(() => {
 
             <!-- Email Address -->
             <div class="mb-3">
-              <label class="form-label text-muted small fw-semibold">
+              <label class="form-label text-muted small fw-semibold mb-1">
                 EMAIL ADDRESS <span class="text-danger">*</span>
               </label>
-              <div class="input-group">
-                <span class="input-group-text bg-dark border-secondary text-muted">
+              <div class="idp-input-wrap">
+                <span class="input-icon">
                   <i class="bi bi-envelope"></i>
                 </span>
                 <input
                   v-model="form.email"
                   type="email"
-                  class="form-control bg-dark text-white border-secondary"
+                  class="form-control idp-field"
                   placeholder="staff@firm.com"
                   required
                 />
@@ -283,17 +278,17 @@ onMounted(() => {
 
             <!-- Mobile Number -->
             <div class="mb-3">
-              <label class="form-label text-muted small fw-semibold">
+              <label class="form-label text-muted small fw-semibold mb-1">
                 MOBILE NUMBER <span class="text-danger">*</span>
               </label>
-              <div class="input-group">
-                <span class="input-group-text bg-dark border-secondary text-muted">
+              <div class="idp-input-wrap">
+                <span class="input-icon">
                   <i class="bi bi-telephone"></i>
                 </span>
                 <input
                   v-model="form.mobile"
                   type="tel"
-                  class="form-control bg-dark text-white border-secondary"
+                  class="form-control idp-field font-monospace"
                   placeholder="017XXXXXXXX"
                   required
                 />
@@ -302,24 +297,25 @@ onMounted(() => {
 
             <!-- Password -->
             <div class="mb-3">
-              <label class="form-label text-muted small fw-semibold d-flex justify-content-between">
+              <label class="form-label text-muted small fw-semibold mb-1 d-flex justify-content-between">
                 <span>PASSWORD {{ isEditMode ? '(Leave blank to keep unchanged)' : '*' }}</span>
                 <span v-if="!isEditMode" class="text-muted fw-normal">Min 6 chars</span>
               </label>
-              <div class="input-group">
-                <span class="input-group-text bg-dark border-secondary text-muted">
+              <div class="idp-input-wrap">
+                <span class="input-icon">
                   <i class="bi bi-key"></i>
                 </span>
                 <input
                   v-model="form.password"
                   :type="showPassword ? 'text' : 'password'"
-                  class="form-control bg-dark text-white border-secondary"
+                  class="form-control idp-field pe-5"
                   :placeholder="isEditMode ? '••••••••' : 'Enter login password'"
                   :required="!isEditMode"
                 />
                 <button
                   type="button"
-                  class="btn btn-outline-secondary"
+                  class="btn-eye-toggle"
+                  title="Toggle password visibility"
                   @click="showPassword = !showPassword"
                 >
                   <i class="bi" :class="showPassword ? 'bi-eye-slash' : 'bi-eye'"></i>
@@ -329,41 +325,22 @@ onMounted(() => {
 
             <!-- Role Selection -->
             <div class="mb-3">
-              <label class="form-label text-muted small fw-semibold">ACCOUNT ROLE</label>
-              <div class="d-flex gap-3">
-                <div class="form-check custom-radio-card flex-fill p-3 border border-secondary rounded" :class="{ 'border-primary bg-primary-subtle': form.role === 'user' }">
-                  <input
-                    id="roleUser"
-                    v-model="form.role"
-                    class="form-check-input me-2"
-                    type="radio"
-                    value="user"
-                  />
-                  <label class="form-check-label text-white fw-semibold cursor-pointer" for="roleUser">
-                    Staff / Sub-User
-                    <div class="text-muted small fw-normal">Custom granular module permissions</div>
-                  </label>
+              <label class="form-label text-muted small fw-semibold mb-1">ACCOUNT ROLE</label>
+              <div class="role-badge-card p-3 rounded d-flex align-items-center gap-3">
+                <div class="role-icon-box">
+                  <i class="bi bi-person-gear text-primary fs-4"></i>
                 </div>
-                <div class="form-check custom-radio-card flex-fill p-3 border border-secondary rounded" :class="{ 'border-primary bg-primary-subtle': form.role === 'admin' }">
-                  <input
-                    id="roleAdmin"
-                    v-model="form.role"
-                    class="form-check-input me-2"
-                    type="radio"
-                    value="admin"
-                  />
-                  <label class="form-check-label text-white fw-semibold cursor-pointer" for="roleAdmin">
-                    Admin
-                    <div class="text-muted small fw-normal">Unrestricted access to all firm modules</div>
-                  </label>
+                <div>
+                  <div class="text-white fw-bold">Staff / Sub-User</div>
+                  <div class="text-muted small">Custom granular module permissions assigned below</div>
                 </div>
               </div>
             </div>
 
             <!-- Account Status -->
             <div class="mb-2">
-              <label class="form-label text-muted small fw-semibold">ACCOUNT STATUS</label>
-              <select v-model="form.status" class="form-select bg-dark text-white border-secondary">
+              <label class="form-label text-muted small fw-semibold mb-1">ACCOUNT STATUS</label>
+              <select v-model="form.status" class="form-select idp-select">
                 <option value="active">Active (Can log in immediately)</option>
                 <option value="inactive">Inactive / Suspended (Access disabled)</option>
               </select>
@@ -374,16 +351,16 @@ onMounted(() => {
 
       <!-- Right Column: Granular Module Permissions -->
       <div class="col-lg-7">
-        <div class="card bg-dark border-secondary h-100 shadow-sm">
-          <div class="card-header bg-transparent border-secondary py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="card idp-form-card h-100 shadow-sm">
+          <div class="card-header bg-transparent border-secondary border-opacity-25 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
-              <h5 class="card-title text-white mb-0 d-flex align-items-center gap-2">
+              <h5 class="card-title text-white mb-0 d-flex align-items-center gap-2 fs-6 fw-bold">
                 <i class="bi bi-shield-lock text-primary"></i> Module Access & Permissions
               </h5>
               <span class="text-muted small">Select which features this sub-user can access (All selected by default)</span>
             </div>
 
-            <div v-if="form.role !== 'admin'" class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
               <button
                 type="button"
                 class="btn btn-sm btn-outline-primary px-2"
@@ -402,26 +379,18 @@ onMounted(() => {
           </div>
 
           <div class="card-body p-4">
-            <div v-if="form.role === 'admin'" class="p-4 border border-info rounded text-center my-3 bg-opacity-10 bg-info">
-              <i class="bi bi-info-circle-fill text-info fs-3 mb-2 d-block"></i>
-              <h6 class="text-white fw-semibold mb-1">Organization Administrator</h6>
-              <p class="text-muted small mb-0">
-                Admin users have full unrestricted access to all modules and configurations automatically.
-              </p>
-            </div>
-
-            <div v-else class="row g-3">
+            <div class="row g-3">
               <div
                 v-for="mod in availableModules"
                 :key="mod.id"
                 class="col-md-6"
               >
                 <div
-                  class="permission-card p-3 rounded border border-secondary d-flex align-items-start gap-3 cursor-pointer transition-all"
-                  :class="{ 'border-primary bg-primary bg-opacity-10': isModuleSelected(mod.id) }"
+                  class="permission-card p-3 rounded d-flex align-items-start gap-3 cursor-pointer"
+                  :class="{ 'permission-card-active': isModuleSelected(mod.id) }"
                   @click="toggleModule(mod.id)"
                 >
-                  <div class="form-check pt-1">
+                  <div class="form-check pt-1 m-0">
                     <input
                       :id="'perm-' + mod.id"
                       type="checkbox"
@@ -444,9 +413,9 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="card-footer bg-transparent border-secondary py-3 d-flex justify-content-between align-items-center">
+          <div class="card-footer bg-transparent border-secondary border-opacity-25 py-3 d-flex justify-content-between align-items-center">
             <span class="text-muted small">
-              Selected Modules: <strong class="text-white">{{ form.role === 'admin' ? availableModules.length : form.permissions.length }} / {{ availableModules.length }}</strong>
+              Selected Modules: <strong class="text-white">{{ form.permissions.length }} / {{ availableModules.length }}</strong>
             </span>
             <button
               type="button"
@@ -469,23 +438,117 @@ onMounted(() => {
 .cursor-pointer {
   cursor: pointer;
 }
+
+.idp-form-card {
+  background: #1e242d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+/* Unified Input Wrapper to Eliminate Broken Borders */
+.idp-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.idp-input-wrap .input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  font-size: 1rem;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.idp-field {
+  width: 100%;
+  height: 40px;
+  padding: 8px 12px 8px 38px;
+  background-color: #14181e !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 6px !important;
+  color: #f8fafc !important;
+  font-size: 0.88rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.idp-field:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+  outline: none;
+}
+
+.idp-field::placeholder {
+  color: #64748b;
+}
+
+.btn-eye-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #64748b;
+  padding: 4px 6px;
+  cursor: pointer;
+  z-index: 5;
+  transition: color 0.2s ease;
+}
+
+.btn-eye-toggle:hover {
+  color: #f8fafc;
+}
+
+.idp-select {
+  height: 40px;
+  background-color: #14181e !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 6px !important;
+  color: #f8fafc !important;
+  font-size: 0.88rem;
+}
+
+.idp-select:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Role Card */
+.role-badge-card {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.role-icon-box {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Permission Cards */
 .permission-card {
-  background: rgba(255, 255, 255, 0.02);
+  background: #14181e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease-in-out;
 }
+
 .permission-card:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(99, 102, 241, 0.5) !important;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(59, 130, 246, 0.4);
 }
-.custom-radio-card {
-  background: rgba(255, 255, 255, 0.02);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.custom-radio-card:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-.bg-primary-subtle {
-  background-color: rgba(99, 102, 241, 0.15) !important;
+
+.permission-card-active {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border-color: rgba(59, 130, 246, 0.45) !important;
 }
 </style>

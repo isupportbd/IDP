@@ -133,6 +133,10 @@ const totalMonthPurchaseSum = computed(() => {
   return clientsMatchingDropdowns.value.reduce((acc, c) => acc + (c.purchaseAmount || 0), 0);
 });
 
+const totalMonthBeCount = computed(() => {
+  return clientsMatchingDropdowns.value.reduce((acc, c) => acc + (c.beCount || 0), 0);
+});
+
 // Filter by search, status tab, client type, and reference
 const filteredClients = computed(() => {
   let list = clientsMatchingDropdowns.value;
@@ -207,6 +211,7 @@ const exportToExcel = () => {
     "Customer Type": c.clientType,
     "Reference": c.reference,
     "Tax Period": selectedMonth.value,
+    "Total BE": c.beCount || 0,
     "Purchase Amount (Tk)": c.purchaseAmount || 0,
     "Submission Status": c.isSubmitted ? "Submitted" : "Not-Filed",
     "Submission ID": c.submission?.submissionId || "Pending",
@@ -345,7 +350,7 @@ onMounted(() => {
             </div>
           </div>
           <div class="card-sub text-success mb-2">
-            <i class="bi bi-check-circle me-1"></i> Total Volume: {{ formatCurrency(totalMonthPurchaseSum) }} Tk
+            <i class="bi bi-file-earmark-text me-1"></i> Total BE: {{ totalMonthBeCount }}
           </div>
 
           <!-- Sub-Status Badges -->

@@ -11,6 +11,7 @@ import {
   refreshToken,
   register,
   rechargeWallet,
+  buyStorage,
   resetPassword,
   sendTestSms,
   verifyEmail
@@ -149,6 +150,26 @@ const rechargeWalletRoute = createRoute({
   }
 });
 
+const buyStorageRoute = createRoute({
+  path: "/buy-storage",
+  method: "post",
+  tags: ["Auth"],
+  description: "Purchase extra permanent storage add-on (1 GB = ৳1,000)",
+  request: {
+    body: jsonContent(
+      z.object({
+        gigabytes: z.number().min(1).default(1),
+        paymentSource: z.enum(["wallet", "bkash"]).default("wallet"),
+        trxId: z.string().optional()
+      }),
+      "Storage purchase payload"
+    )
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.any(), "Storage purchase response")
+  }
+});
+
 const getUserStatsRoute = createRoute({
   path: "/users-stats",
   method: "get",
@@ -194,6 +215,7 @@ const protectedRoute = createRouter()
   .api(meRoute, me)
   .api(getUserStatsRoute, getUserStats)
   .api(rechargeWalletRoute, rechargeWallet)
+  .api(buyStorageRoute, buyStorage)
   .api(sendTestSmsRoute, sendTestSms)
   .api(logoutRoute, logout)
   .api(logoutAllDevicesRoute, logoutAllDevices);

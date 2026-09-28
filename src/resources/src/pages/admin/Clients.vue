@@ -95,7 +95,7 @@ const handleToggleActive = async (client: ClientItem) => {
   const nextState = !client.isActive;
   try {
     await toggleClient(client.id, nextState);
-    toast.success(`Client ${nextState ? "activated" : "deactivated"}`);
+    toast.success(nextState ? `Client "${client.companyName}" restored & active.` : `Client "${client.companyName}" released successfully.`);
   } catch (err: any) {
     toast.error(err.response?.data?.message || "Failed to update status");
   }
@@ -311,17 +311,17 @@ const handleConfirmDelete = async () => {
               </span>
             </td>
 
-            <!-- Status Toggle -->
+            <!-- Status Toggle (Active / Released) -->
             <td style="text-align: center;">
               <button
                 type="button"
                 class="badge-btn"
                 :class="client.isActive ? 'badge-active' : 'badge-inactive'"
-                title="Click to toggle client status"
+                :title="client.isActive ? 'Active under your firm (Click to Release client)' : 'Released (Click to Re-activate / Restore)'"
                 @click="handleToggleActive(client)"
               >
                 <span class="dot"></span>
-                {{ client.isActive ? 'Active' : 'Inactive' }}
+                {{ client.isActive ? 'Active' : 'Released' }}
               </button>
             </td>
 
@@ -440,14 +440,18 @@ const handleConfirmDelete = async () => {
       tabindex="-1"
       style="background: rgba(0, 0, 0, 0.75);"
     >
-      <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-dialog modal-dialog-centered modal-md">
         <div class="modal-content idp-card text-center p-4">
-          <i class="bi bi-trash text-danger fs-1 mb-2"></i>
-          <h5 class="text-white fw-bold">Delete Client?</h5>
-          <p class="text-muted small">
-            Are you sure you want to remove <strong>{{ deleteTarget.companyName }}</strong>? This action cannot be undone.
+          <i class="bi bi-shield-exclamation text-danger fs-1 mb-2"></i>
+          <h5 class="text-white fw-bold">Delete Client Account?</h5>
+          <p class="text-muted small mb-2">
+            Are you sure you want to remove <strong>{{ deleteTarget.companyName }}</strong>?
           </p>
-          <div class="d-flex justify-content-center gap-2 mt-3">
+          <div class="p-2 mb-3 bg-dark bg-opacity-50 border border-secondary border-opacity-25 rounded text-start small text-warning">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Audit & Accounting Rule:</strong> If this client has any past invoices, bills, payments, purchases, or VAT returns, permanent deletion will be prevented to protect your ledger balance. In that case, you can simply <strong>Deactivate / Release</strong> the client.
+          </div>
+          <div class="d-flex justify-content-center gap-2">
             <button type="button" class="btn btn-idp-secondary btn-sm px-3" @click="showDeleteModal = false">Cancel</button>
             <button
               type="button"
@@ -456,7 +460,7 @@ const handleConfirmDelete = async () => {
               @click="handleConfirmDelete"
             >
               <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></span>
-              Delete
+              Confirm Delete
             </button>
           </div>
         </div>

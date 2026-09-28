@@ -34,8 +34,11 @@ const {
 // Tax Period Month (e.g. "2026-08")
 const getLastMonth = () => {
   const d = new Date();
+  d.setDate(1);
   d.setMonth(d.getMonth() - 1);
-  return d.toISOString().slice(0, 7);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
 };
 
 const selectedMonth = ref(getLastMonth());

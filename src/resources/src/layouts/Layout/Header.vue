@@ -11,6 +11,7 @@ const authStore = useAuthStore();
 
 const emit = defineEmits<{
   (e: "openRecharge"): void;
+  (e: "openStorage"): void;
 }>();
 
 const isDropdownOpen = ref(false);
@@ -279,7 +280,7 @@ onMounted(() => {
   statsTimer = setInterval(() => {
     fetchStats();
     fetchNotifications();
-  }, 300000); // 5 minutes auto-refresh
+  }, 30000); // 30 seconds auto-refresh
 });
 
 onUnmounted(() => {
@@ -338,6 +339,23 @@ onUnmounted(() => {
             </strong>
           </div>
 
+          <!-- Storage Usage Card (Clickable to open Buy Storage Modal) -->
+          <div
+            class="d-flex align-items-center rounded bg-dark border border-secondary cursor-pointer"
+            style="font-size: 0.85rem; padding: 6px 14px !important; gap: 8px; min-width: 130px;"
+            :title="'Storage Usage: ' + ((authStore.user as any)?.usedStorageMB || 0) + ' MB / ' + ((authStore.user as any)?.totalStorageMB || 1024) + ' MB (' + ((authStore.user as any)?.storageUsagePercent || 0) + '%)'"
+            @click="emit('openStorage')"
+          >
+            <i
+              class="bi bi-hdd-stack"
+              :class="((authStore.user as any)?.storageUsagePercent || 0) >= 90 ? 'text-danger' : 'text-warning'"
+            ></i>
+            <span class="text-muted d-none d-sm-inline">Storage:</span>
+            <strong class="text-white font-monospace d-inline-flex align-items-baseline">
+              {{ (authStore.user as any)?.usedStorageMB || 0 }} <span class="text-muted small fw-normal ms-1">/ {{ (authStore.user as any)?.totalStorageMB || 1024 }} MB</span>
+            </strong>
+          </div>
+
           <!-- Recharge Button -->
           <button
             type="button"
@@ -388,7 +406,14 @@ onUnmounted(() => {
               >
                 <div class="d-flex align-items-center justify-content-between mb-1">
                   <span
-                    v-if="notif.type === 'recharge_request'"
+                    v-if="notif.type === 'storage_request'"
+                    class="badge text-white px-2 py-0.5"
+                    style="font-size: 0.7rem; background-color: #7952b3 !important;"
+                  >
+                    <i class="bi bi-hdd-network me-1"></i>Extra Storage
+                  </span>
+                  <span
+                    v-else-if="notif.type === 'recharge_request'"
                     class="badge bg-info text-dark px-2 py-0.5"
                     style="font-size: 0.7rem;"
                   >
@@ -407,8 +432,8 @@ onUnmounted(() => {
                 </div>
                 <p class="mb-2 text-light small">{{ notif.message }}</p>
                 <div class="d-flex gap-2 justify-content-end">
-                  <!-- Wallet Recharge Actions -->
-                  <template v-if="notif.type === 'recharge_request'">
+                  <!-- Wallet Recharge & Storage Purchase Actions -->
+                  <template v-if="notif.type === 'recharge_request' || notif.type === 'storage_request'">
                     <button
                       class="btn btn-sm btn-success px-2 py-1 small d-inline-flex align-items-center gap-1"
                       @click="approveRecharge(notif.transactionId)"
@@ -475,7 +500,7 @@ onUnmounted(() => {
           type="button"
           class="btn btn-sm btn-dark border border-secondary rounded d-flex align-items-center"
           style="font-size: 0.85rem; padding: 6px 14px !important; gap: 8px; cursor: pointer;"
-          @click="showStatsDropdown = !showStatsDropdown; isDropdownOpen = false; showNotifications = false"
+          @click="showStatsDropdown = !showStatsDropdown; if (showStatsDropdown) fetchStats(); isDropdownOpen = false; showNotifications = false"
           title="Click to view online & active users"
         >
           <span
@@ -641,7 +666,7 @@ onUnmounted(() => {
             <i class="bi bi-sliders text-danger"></i> Master Settings
           </router-link>
           <router-link
-            v-else-if="isAdminOrSuperAdmin"
+            v-else-if="isTenantAdmin"
             to="/admin/settings"
             class="dropdown-item d-flex align-items-center gap-2"
             @click="isDropdownOpen = false"
@@ -655,6 +680,14 @@ onUnmounted(() => {
           >
             <i class="bi bi-gear text-info"></i> Profile Settings
           </router-link>
+          <button
+            v-if="!isSuperAdmin && isTenantAdmin"
+            type="button"
+            class="dropdown-item d-flex align-items-center gap-2"
+            @click="isDropdownOpen = false; emit('openStorage')"
+          >
+            <i class="bi bi-hdd-stack text-warning"></i> Buy Extra Storage
+          </button>
           <div class="dropdown-divider border-secondary my-1"></div>
           <button
             class="dropdown-item text-danger d-flex align-items-center gap-2"

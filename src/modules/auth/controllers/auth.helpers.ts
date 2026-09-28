@@ -1,17 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { jwtConfig } from "@/config/index.js";
 import { cookie, db, jwt } from "@/framework/facade.js";
 import { refreshTokens } from "@/modules/auth/database/models/user.js";
 
 import { users } from "@/modules/auth/database/models/user.js";
 import { plans } from "@/modules/superadmin/database/models/plans.js";
-
-/**
- * Why: Removes sensitive/internal fields before returning user payload.
- * When: Used in auth responses like register/login/me.
- * Where: Called by auth.controller handlers.
- */
+import { clients } from "@/modules/clients/database/models/clients.js";
+import { purchases } from "@/modules/clients/database/models/purchases.js";
+import { vatSubmissions } from "@/modules/clients/database/models/vat_submissions.js";
+import { bills } from "@/modules/billing/database/models/bills.js";
 import { subscriptionTransactions } from "@/modules/superadmin/database/models/subscription_transactions.js";
 
 /**
@@ -94,6 +92,8 @@ export async function sanitizeUser(user: any) {
 
   let effectiveAdvanceBalance = user.advanceBalance ?? 0;
   let effectiveSmsBalance = (user as any).smsBalance ?? 0;
+  let extraStorageMB = user.extraStorageMB ?? 0;
+  const tenantAdminId = user.adminId ? Number(user.adminId) : user.id;
 
   if (user.adminId) {
     try {
@@ -103,12 +103,31 @@ export async function sanitizeUser(user: any) {
       if (adminUser) {
         effectiveAdvanceBalance = adminUser.advanceBalance ?? 0;
         effectiveSmsBalance = (adminUser as any).smsBalance ?? 0;
+        extraStorageMB = adminUser.extraStorageMB ?? 0;
       }
     } catch {}
   }
 
   const isSubscriptionActive = !!(user.expDate && new Date(user.expDate) > new Date());
   const shortage = isSubscriptionActive ? 0 : Math.max(0, requiredPlanPrice - effectiveAdvanceBalance);
+
+  // Calculate storage usage metrics
+  const baseStorageMB = plan?.maxStorageMB || 1024;
+  const totalStorageMB = baseStorageMB + extraStorageMB;
+  let totalRecords = 0;
+  try {
+    const [pCount] = await db.select({ count: sql<number>`count(*)` }).from(purchases).where(eq(purchases.adminId, tenantAdminId));
+    const [cCount] = await db.select({ count: sql<number>`count(*)` }).from(clients).where(eq(clients.createdBy, tenantAdminId));
+    const [sCount] = await db.select({ count: sql<number>`count(*)` }).from(vatSubmissions).where(eq(vatSubmissions.submittedBy, tenantAdminId));
+    const [bCount] = await db.select({ count: sql<number>`count(*)` }).from(bills).where(eq(bills.createdBy, tenantAdminId));
+    totalRecords = Number(pCount?.count || 0) + Number(cCount?.count || 0) + Number(sCount?.count || 0) + Number(bCount?.count || 0);
+  } catch {}
+
+  const estimatedKB = Math.round(totalRecords * 3.2);
+  const usedStorageMB = Number((estimatedKB / 1024).toFixed(2));
+  const storageUsagePercent = totalStorageMB > 0 ? Number(((usedStorageMB / totalStorageMB) * 100).toFixed(2)) : 0;
+  const isStorageWarning = isSubscriptionActive && (storageUsagePercent >= 90);
+  const isStorageExhausted = isSubscriptionActive && (storageUsagePercent >= 100);
 
   return {
     id: user.id,
@@ -123,6 +142,13 @@ export async function sanitizeUser(user: any) {
     planPrice: requiredPlanPrice,
     shortage,
     isSubscriptionActive,
+    extraStorageMB,
+    baseStorageMB,
+    totalStorageMB,
+    usedStorageMB,
+    storageUsagePercent,
+    isStorageWarning,
+    isStorageExhausted,
     adminId: user.adminId ?? null,
     expDate: user.expDate ? String(user.expDate) : null,
     plan,

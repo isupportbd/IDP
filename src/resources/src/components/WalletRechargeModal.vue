@@ -203,15 +203,15 @@ const close = () => {
             <div v-if="rechargeAmount && rechargeAmount > 0" class="card bg-dark border-secondary p-3 mb-3 small">
               <div class="d-flex justify-content-between text-muted mb-1" style="font-size: 0.78rem;">
                 <span>bKash Fee ({{ bkashChargePercent }}%):</span>
-                <span class="text-danger font-monospace">-৳{{ calculatedCharge }}</span>
+                <span class="text-danger font-monospace">-<span class="currency-symbol">৳</span>{{ calculatedCharge }}</span>
               </div>
               <div class="d-flex justify-content-between text-white fw-semibold mb-1" style="font-size: 0.82rem;">
                 <span>Net Wallet Credit:</span>
-                <span class="text-success font-monospace">+৳{{ netCredit }}</span>
+                <span class="text-success font-monospace">+<span class="currency-symbol">৳</span>{{ netCredit }}</span>
               </div>
               <div class="d-flex justify-content-between pt-1 border-top border-secondary text-info fw-bold" style="font-size: 0.85rem;">
                 <span>New Wallet Balance:</span>
-                <span class="font-monospace">৳{{ projectedBalance }}</span>
+                <span class="font-monospace"><span class="currency-symbol">৳</span>{{ projectedBalance }}</span>
               </div>
             </div>
 
@@ -230,3 +230,14 @@ const close = () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.currency-symbol {
+  font-size: 0.76em;
+  font-weight: 600;
+  margin-right: 1.5px;
+  opacity: 0.9;
+  display: inline-block;
+  vertical-align: baseline;
+}
+</style>

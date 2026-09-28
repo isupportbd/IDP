@@ -1,4 +1,6 @@
 import { createRoute, createRouter, HttpStatusCodes, jsonContent, z } from "@/framework/facade.js";
+import { authMiddleware } from "@/middlewares/auth-middleware.js";
+import { subscriptionMiddleware } from "@/middlewares/subscription-middleware.js";
 import {
   listSubmissions,
   recordSubmission,
@@ -101,6 +103,7 @@ const batchDeleteSubmissionsRoute = createRoute({
 });
 
 export default createRouter()
+  .group(authMiddleware, subscriptionMiddleware)
   .api(getSubmissionsRoute, [], listSubmissions)
   .api(postSubmissionRoute, [], recordSubmission)
   .api(batchDeleteSubmissionsRoute, [], batchDeleteSubmissions)

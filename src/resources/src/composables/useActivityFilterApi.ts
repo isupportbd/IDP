@@ -27,6 +27,7 @@ export interface ActivityClient {
   reference: string;
   taxPeriod: string;
   purchaseAmount: number;
+  beCount?: number;
   isSubmitted: boolean;
   submission: ActivityClientSubmission | null;
 }
@@ -42,6 +43,7 @@ export interface ActivityStats {
   totalFiledClients: number;
   totalUnfiledClients: number;
   totalPurchaseSum: number;
+  totalBeCount?: number;
 }
 
 export function useActivityFilterApi() {
@@ -58,7 +60,8 @@ export function useActivityFilterApi() {
     inactiveUnfiledClients: 0,
     totalFiledClients: 0,
     totalUnfiledClients: 0,
-    totalPurchaseSum: 0
+    totalPurchaseSum: 0,
+    totalBeCount: 0
   });
   const clientTypes = ref<Array<{ id: number; name: string }>>([]);
   const references = ref<Array<{ id: number; name: string }>>([]);

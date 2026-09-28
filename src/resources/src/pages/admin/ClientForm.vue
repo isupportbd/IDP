@@ -35,7 +35,8 @@ const isLoading = ref(false);
 const formError = ref("");
 const showVatPassword = ref(false);
 
-const binStatus = ref<"idle" | "checking" | "unique" | "taken">("idle");
+const binStatus = ref<"idle" | "checking" | "unique" | "released" | "taken">("idle");
+const binMessage = ref<string>("");
 const mobileWarning = ref<string | null>(null);
 
 const form = ref<{
@@ -142,7 +143,7 @@ onMounted(async () => {
   }
 });
 
-// Debounced live BIN uniqueness check
+// Debounced live BIN uniqueness & release check
 let binTimer: any = null;
 const handleBinInput = (e: Event) => {
   const val = (e.target as HTMLInputElement).value;
@@ -152,12 +153,43 @@ const handleBinInput = (e: Event) => {
   const trimmed = val.trim();
   if (!trimmed) {
     binStatus.value = "idle";
+    binMessage.value = "";
     return;
   }
   binStatus.value = "checking";
   binTimer = setTimeout(async () => {
-    const res = await checkBinUnique(trimmed, isEditMode.value ? clientId.value : undefined);
-    binStatus.value = res.unique ? "unique" : "taken";
+    const res: any = await checkBinUnique(trimmed, isEditMode.value ? clientId.value : undefined);
+    if (res.status === "RELEASED_AVAILABLE_TO_BIND") {
+      binStatus.value = "released";
+      binMessage.value = `Client "${res.existingClient?.companyName || 'Organization'}" is released by previous firm. All profile data has been automatically loaded!`;
+      if (res.existingClient && !isEditMode.value) {
+        form.value.companyName = res.existingClient.companyName || "";
+        form.value.proprietorName = res.existingClient.proprietorName || "";
+        form.value.mobile = res.existingClient.mobile || "";
+        form.value.alternativeMobile = res.existingClient.alternativeMobile || "";
+        form.value.email = res.existingClient.email || "";
+        form.value.address = res.existingClient.address || "";
+        form.value.tinNumber = res.existingClient.tinNumber || "";
+        form.value.tradeLicenseNo = res.existingClient.tradeLicenseNo || "";
+        form.value.vatUserId = res.existingClient.vatUserId || "";
+        if (res.existingClient.vatServiceType) {
+          form.value.vatServiceType = res.existingClient.vatServiceType;
+        }
+        if (res.existingClient.customerTypeId) {
+          form.value.customerTypeId = res.existingClient.customerTypeId;
+        }
+        toast.info(`Found released client "${res.existingClient.companyName}". Profile loaded!`);
+      }
+    } else if (res.status === "LOCKED_BY_OTHER_FIRM") {
+      binStatus.value = "taken";
+      binMessage.value = res.message || "Currently active under another firm. Previous firm must clear dues and release before binding.";
+    } else if (res.unique) {
+      binStatus.value = "unique";
+      binMessage.value = "BIN is completely new and available.";
+    } else {
+      binStatus.value = "taken";
+      binMessage.value = res.message || "BIN already registered.";
+    }
   }, 400);
 };
 
@@ -279,12 +311,13 @@ const handleSubmit = async () => {
         <button
           type="button"
           class="btn btn-primary btn-sm px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm"
+          :class="{ 'btn-warning text-dark': binStatus === 'released' && !isEditMode }"
           :disabled="isSubmitting || isLoading"
           @click="handleSubmit"
         >
           <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-          <i v-else class="bi bi-check2"></i>
-          <span>{{ isEditMode ? 'Update Client' : 'Save Client Organization' }}</span>
+          <i v-else :class="binStatus === 'released' && !isEditMode ? 'bi bi-link-45deg fs-6' : 'bi bi-check2'"></i>
+          <span>{{ isEditMode ? 'Update Client' : (binStatus === 'released' ? 'Claim & Bind Client' : 'Save Client Organization') }}</span>
         </button>
       </div>
     </div>
@@ -392,19 +425,33 @@ const handleSubmit = async () => {
                   <span class="spinner-border spinner-border-sm me-1"></span> Checking...
                 </span>
                 <span v-else-if="binStatus === 'unique'" class="text-success small fw-semibold">
-                  <i class="bi bi-check-circle-fill me-1"></i> Unique BIN
+                  <i class="bi bi-check-circle-fill me-1"></i> Available
+                </span>
+                <span v-else-if="binStatus === 'released'" class="badge bg-warning text-dark small fw-semibold">
+                  <i class="bi bi-unlock-fill me-1"></i> Released (Ready to Bind)
                 </span>
                 <span v-else-if="binStatus === 'taken'" class="text-danger small fw-semibold">
-                  <i class="bi bi-x-circle-fill me-1"></i> Already registered
+                  <i class="bi bi-shield-lock-fill me-1"></i> Locked / Registered
                 </span>
               </label>
               <input
                 :value="form.binNumber"
                 type="text"
                 class="form-control idp-input font-monospace"
+                :class="{
+                  'border-success': binStatus === 'unique',
+                  'border-warning': binStatus === 'released',
+                  'border-danger': binStatus === 'taken'
+                }"
                 placeholder="e.g. 001234567-0101"
                 @input="handleBinInput"
               />
+              <div v-if="binStatus === 'released'" class="text-warning small mt-1">
+                <i class="bi bi-info-circle me-1"></i> {{ binMessage }}
+              </div>
+              <div v-else-if="binStatus === 'taken' && binMessage" class="text-danger small mt-1">
+                <i class="bi bi-exclamation-triangle me-1"></i> {{ binMessage }}
+              </div>
             </div>
 
             <div class="col-md-4">
@@ -727,12 +774,13 @@ const handleSubmit = async () => {
           <button
             type="button"
             class="btn btn-primary btn-sm px-4 fw-semibold shadow-sm d-flex align-items-center gap-2"
+            :class="{ 'btn-warning text-dark': binStatus === 'released' && !isEditMode }"
             :disabled="isSubmitting"
             @click="handleSubmit"
           >
             <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
-            <i v-else class="bi bi-check2"></i>
-            <span>{{ isEditMode ? 'Update Client' : 'Save Client Organization' }}</span>
+            <i v-else :class="binStatus === 'released' && !isEditMode ? 'bi bi-link-45deg fs-6' : 'bi bi-check2'"></i>
+            <span>{{ isEditMode ? 'Update Client' : (binStatus === 'released' ? 'Claim & Bind Client' : 'Save Client Organization') }}</span>
           </button>
         </div>
       </div>

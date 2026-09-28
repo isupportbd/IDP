@@ -1,4 +1,6 @@
 import { createRoute, createRouter, HttpStatusCodes, jsonContent, z } from "@/framework/facade.js";
+import { authMiddleware } from "@/middlewares/auth-middleware.js";
+import { subscriptionMiddleware } from "@/middlewares/subscription-middleware.js";
 import {
   listCustomerTypes,
   createCustomerType,
@@ -252,6 +254,7 @@ const deleteServiceRateRoute = createRoute({
 // ── ROUTER EXPORT ───────────────────────────────────────────────────
 
 export default createRouter()
+  .group(authMiddleware, subscriptionMiddleware)
   .api(getCustomerTypesRoute, [], listCustomerTypes)
   .api(postCustomerTypeRoute, [], createCustomerType)
   .api(toggleCustomerTypeRoute, [], toggleCustomerType)

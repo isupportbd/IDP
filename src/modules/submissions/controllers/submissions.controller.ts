@@ -29,11 +29,34 @@ export const listSubmissions: Handler = async (c: any) => {
     let taxPeriod = query.month || query.taxPeriod;
     if (!taxPeriod) {
       const d = new Date();
+      d.setDate(1);
       d.setMonth(d.getMonth() - 1);
-      taxPeriod = d.toISOString().slice(0, 7);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      taxPeriod = `${year}-${month}`;
     }
 
     const deadline = getSubmissionDeadline(taxPeriod);
+
+    const auth = c.get("auth") || c.get("user");
+    let tenantAdminId: number | null = null;
+    let isSuperAdmin = false;
+
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
+      }
+    }
+
+    const clientConditions: any[] = [eq(clients.isActive, true)];
+    if (!isSuperAdmin && tenantAdminId) {
+      clientConditions.push(eq(clients.createdBy, tenantAdminId));
+    }
 
     // 1. Fetch all ACTIVE clients only
     const activeClients = await db
@@ -51,7 +74,7 @@ export const listSubmissions: Handler = async (c: any) => {
       .from(clients)
       .leftJoin(customerTypes, eq(clients.customerTypeId, customerTypes.id))
       .leftJoin(clientReferences, eq(clients.referenceId, clientReferences.id))
-      .where(eq(clients.isActive, true))
+      .where(and(...clientConditions))
       .orderBy(asc(clients.companyName));
 
     const activeClientIds = activeClients.map((cl) => cl.id);

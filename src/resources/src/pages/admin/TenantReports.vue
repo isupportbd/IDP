@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from "vue";
 import axios from "axios";
 import * as XLSX from "xlsx";
 import MonthMatrix from "@/components/MonthMatrix.vue";
+import { canAccessModule } from "@/composables/useAuth";
 
 // Types
 interface Client {
@@ -120,73 +121,8 @@ const isSavingMonth = ref(false);
 const hideEmptyNotes = ref(true);
 const submissionId = ref<string | null>(null);
 
-// Billing & Invoice State & Models
-interface BillItem {
-  id: string;
-  serviceItemId?: number;
-  itemName: string;
-  qty: number;
-  rate: number;
-  finalAmount: number;
-}
-
-interface Bill {
-  id: string;
-  billNo: string;
-  clientId: number;
-  clientName: string;
-  clientBin?: string;
-  billingMonth: string;
-  billDate: string;
-  items: BillItem[];
-  subtotal: number;
-  discountAmount: number;
-  previousBalance: number;
-  grandTotal: number;
-  paidAmount: number;
-  dueAmount: number;
-  status: "Draft" | "Finalized" | "Paid" | "Partial" | "Due";
-  notes?: string;
-}
-
-const AVAILABLE_SERVICES = [
-  { id: 1, name: "VAT Return Submission", defaultRate: 2000 },
-  { id: 2, name: "Books of Accounts (Mushak 6.2.1) Maintenance", defaultRate: 3000 },
-  { id: 3, name: "Mushak 4.3 Input-Output Price Declaration", defaultRate: 2500 },
-  { id: 4, name: "VAT Audit & Tribunal Consultation", defaultRate: 5000 },
-  { id: 5, name: "VAT Registration / BIN Amendment", defaultRate: 1500 },
-  { id: 6, name: "Custom VAT Advisory Service", defaultRate: 1000 }
-];
-
-const billsMap = ref<Record<string, Bill>>({
-  "101_2026-08": {
-    id: "BILL-101-202608",
-    billNo: "INV-2026-0801",
-    clientId: 101,
-    clientName: "M/S. NAZMUL & BROTHERS",
-    clientBin: "000286718-0701",
-    billingMonth: "2026-08",
-    billDate: "2026-08-31",
-    items: [
-      { id: "1", itemName: "VAT Return Submission", qty: 1, rate: 2000, finalAmount: 2000 },
-      { id: "2", itemName: "Books of Accounts (Mushak 6.2.1) Maintenance", qty: 1, rate: 3000, finalAmount: 3000 }
-    ],
-    subtotal: 5000,
-    discountAmount: 0,
-    previousBalance: 0,
-    grandTotal: 5000,
-    paidAmount: 0,
-    dueAmount: 5000,
-    status: "Due",
-    notes: "Monthly VAT advisory & Return filing services for August 2026"
-  }
-});
-
-const currentMonthBill = computed(() => {
-  if (!selectedClientId.value || !selectedMonthYear.value) return null;
-  const key = `${selectedClientId.value}_${selectedMonthYear.value}`;
-  return billsMap.value[key] || null;
-});
+// Real Billing & Invoice State from Database
+const currentMonthBill = ref<any>(null);
 
 // Submission ID Modal Handlers
 const showSubIdModal = ref(false);
@@ -226,164 +162,6 @@ const saveSubmissionId = async () => {
   } finally {
     isSavingSubId.value = false;
   }
-};
-
-// Create / Edit Bill Modal Handlers
-const showCreateBillModal = ref(false);
-const showViewInvoiceModal = ref(false);
-const activeViewingBill = ref<Bill | null>(null);
-
-const billForm = ref({
-  billNo: "",
-  billDate: new Date().toISOString().slice(0, 10),
-  items: [] as BillItem[],
-  discountAmount: 0,
-  previousBalance: 0,
-  notes: "",
-  status: "Finalized" as "Draft" | "Finalized"
-});
-
-const billSubtotal = computed(() => {
-  return billForm.value.items.reduce((sum, it) => sum + (Number(it.finalAmount) || 0), 0);
-});
-
-const billGrandTotal = computed(() => {
-  const sub = billSubtotal.value;
-  const disc = Number(billForm.value.discountAmount) || 0;
-  const prev = Number(billForm.value.previousBalance) || 0;
-  return Math.max(0, sub - disc + prev);
-});
-
-const openCreateBillModal = () => {
-  if (!selectedClient.value || !selectedMonthYear.value) return;
-  const key = `${selectedClient.value.id}_${selectedMonthYear.value}`;
-  const existing = billsMap.value[key];
-
-  if (existing) {
-    billForm.value = {
-      billNo: existing.billNo,
-      billDate: existing.billDate || new Date().toISOString().slice(0, 10),
-      items: JSON.parse(JSON.stringify(existing.items)),
-      discountAmount: existing.discountAmount,
-      previousBalance: existing.previousBalance,
-      notes: existing.notes || "",
-      status: existing.status === "Draft" ? "Draft" : "Finalized"
-    };
-  } else {
-    const scope = (selectedClient.value as any).serviceScope || "FULL";
-    const initialItems: BillItem[] = [];
-
-    if (scope === "ONLY_RETURN") {
-      initialItems.push({
-        id: "1",
-        itemName: "VAT Return Submission",
-        qty: 1,
-        rate: 2000,
-        finalAmount: 2000
-      });
-    } else {
-      initialItems.push(
-        {
-          id: "1",
-          itemName: "VAT Return Submission",
-          qty: 1,
-          rate: 2000,
-          finalAmount: 2000
-        },
-        {
-          id: "2",
-          itemName: "Books of Accounts (Mushak 6.2.1) Maintenance",
-          qty: 1,
-          rate: 3000,
-          finalAmount: 3000
-        }
-      );
-    }
-
-    const yr = selectedMonthYear.value.replace("-", "");
-    const rand = Math.floor(100 + Math.random() * 900);
-    billForm.value = {
-      billNo: `INV-${yr}-${selectedClient.value.id}${rand}`,
-      billDate: new Date().toISOString().slice(0, 10),
-      items: initialItems,
-      discountAmount: 0,
-      previousBalance: Number(selectedClient.value.openingBalance) || 0,
-      notes: `Professional VAT advisory and compliance fees for ${formatMonth(selectedMonthYear.value)}`,
-      status: "Finalized"
-    };
-  }
-
-  showCreateBillModal.value = true;
-};
-
-const addBillItem = (preset?: typeof AVAILABLE_SERVICES[0]) => {
-  if (preset) {
-    billForm.value.items.push({
-      id: String(Date.now()),
-      itemName: preset.name,
-      qty: 1,
-      rate: preset.defaultRate,
-      finalAmount: preset.defaultRate
-    });
-  } else {
-    billForm.value.items.push({
-      id: String(Date.now()),
-      itemName: "Custom VAT Service",
-      qty: 1,
-      rate: 1000,
-      finalAmount: 1000
-    });
-  }
-};
-
-const removeBillItem = (idx: number) => {
-  if (billForm.value.items.length > 1) {
-    billForm.value.items.splice(idx, 1);
-  }
-};
-
-const updateItemAmount = (item: BillItem) => {
-  item.finalAmount = (Number(item.qty) || 0) * (Number(item.rate) || 0);
-};
-
-const saveBill = (status: "Draft" | "Finalized" = "Finalized") => {
-  if (!selectedClient.value || !selectedMonthYear.value) return;
-  const key = `${selectedClient.value.id}_${selectedMonthYear.value}`;
-  const sub = billSubtotal.value;
-  const disc = Number(billForm.value.discountAmount) || 0;
-  const prev = Number(billForm.value.previousBalance) || 0;
-  const grand = Math.max(0, sub - disc + prev);
-
-  const newBill: Bill = {
-    id: `BILL-${selectedClient.value.id}-${selectedMonthYear.value.replace("-", "")}`,
-    billNo: billForm.value.billNo || `INV-${Date.now()}`,
-    clientId: selectedClient.value.id,
-    clientName: selectedClient.value.name,
-    clientBin: selectedClient.value.bin,
-    billingMonth: selectedMonthYear.value,
-    billDate: billForm.value.billDate,
-    items: JSON.parse(JSON.stringify(billForm.value.items)),
-    subtotal: sub,
-    discountAmount: disc,
-    previousBalance: prev,
-    grandTotal: grand,
-    paidAmount: 0,
-    dueAmount: grand,
-    status: status,
-    notes: billForm.value.notes
-  };
-
-  billsMap.value[key] = newBill;
-  showCreateBillModal.value = false;
-};
-
-const openViewInvoiceModal = (b: Bill) => {
-  activeViewingBill.value = b;
-  showViewInvoiceModal.value = true;
-};
-
-const printCurrentInvoice = () => {
-  window.print();
 };
 
 // Number Formatter (Strict: No Commas, No Currency Symbols)
@@ -426,12 +204,8 @@ const formatMonth = (mStr?: string): string => {
 // Unit Conversion Helpers
 const filteredUnitConversions = computed(() => {
   if (!purchases.value.length) return unitConversions.value;
-  const currentPurchaseUnits = new Set(
-    purchases.value.map((p) => (p.unit || "KGM").trim().toUpperCase())
-  );
-  return unitConversions.value.filter((u) =>
-    currentPurchaseUnits.has((u.purchaseUnit || "").trim().toUpperCase())
-  );
+  const currentPurchaseUnits = new Set(purchases.value.map((p) => (p.unit || "KGM").trim().toUpperCase()));
+  return unitConversions.value.filter((u) => currentPurchaseUnits.has((u.purchaseUnit || "").trim().toUpperCase()));
 });
 
 const currentConvFactor = computed(() => {
@@ -465,18 +239,14 @@ const filteredClients = computed(() => {
     if (!clientSearchText.value) return clients.value;
   }
   const q = clientSearchText.value.toLowerCase();
-  return clients.value.filter(
-    (c) => c.name.toLowerCase().includes(q) || (c.bin && c.bin.toLowerCase().includes(q))
-  );
+  return clients.value.filter((c) => c.name.toLowerCase().includes(q) || (c.bin && c.bin.toLowerCase().includes(q)));
 });
 
 // Filtered Items for Autocomplete
 const filteredItems = computed(() => {
   if (!itemSearchText.value) return clientMonthItems.value;
   const q = itemSearchText.value.toLowerCase();
-  return clientMonthItems.value.filter(
-    (i) => i.name.toLowerCase().includes(q) || (i.hsCode && i.hsCode.toLowerCase().includes(q))
-  );
+  return clientMonthItems.value.filter((i) => i.name.toLowerCase().includes(q) || (i.hsCode && i.hsCode.toLowerCase().includes(q)));
 });
 
 // Derived Purchase Groups (Sorted: Old to New Bill Date)
@@ -510,9 +280,7 @@ const vatNote15 = computed(() => {
 });
 
 const vatNote13 = computed(() => {
-  return sortPurchasesByDate(
-    purchases.value.filter((p) => !p.vat || Number(p.vat) === 0)
-  );
+  return sortPurchasesByDate(purchases.value.filter((p) => !p.vat || Number(p.vat) === 0));
 });
 
 // Purchase Summary by Item
@@ -625,9 +393,7 @@ const hasMissingRates = computed(() => {
 
 // Return 9.1 Calculations
 const returnNote3Value = computed(() => {
-  return salesReport.value
-    .filter((item) => String(item.note) === "3")
-    .reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0);
+  return salesReport.value.filter((item) => String(item.note) === "3").reduce((sum, item) => sum + (Number(item.totalValue) || 0), 0);
 });
 
 const returnNote4 = computed(() => {
@@ -879,7 +645,7 @@ const fetchReportsData = async () => {
   isLoading.value = true;
 
   try {
-    const [pRes, sRes, stRes, srRes, subRes] = await Promise.allSettled([
+    const [pRes, sRes, stRes, srRes, subRes, bRes] = await Promise.allSettled([
       axios.get("/api/purchases", {
         params: {
           clientId: selectedClientId.value,
@@ -913,7 +679,16 @@ const fetchReportsData = async () => {
           clientId: selectedClientId.value,
           month: selectedMonthYear.value
         }
-      })
+      }),
+      canAccessModule("billing")
+        ? axios.get("/api/billing/bills", {
+            params: {
+              clientId: selectedClientId.value,
+              taxPeriod: selectedMonthYear.value,
+              limit: 1
+            }
+          })
+        : Promise.resolve({ data: { data: [] } } as any)
     ]);
 
     // Purchases
@@ -956,6 +731,13 @@ const fetchReportsData = async () => {
       submissionId.value = subRes.value.data.data;
     } else {
       submissionId.value = null;
+    }
+
+    // Real Bill from Database
+    if (bRes.status === "fulfilled" && bRes.value.data?.data && bRes.value.data.data.length > 0) {
+      currentMonthBill.value = bRes.value.data.data[0];
+    } else {
+      currentMonthBill.value = null;
     }
 
     if (salesReport.value.length === 0) {
@@ -1042,13 +824,16 @@ const computeSalesAndStatementReports = () => {
     const rawFfs: any = p.isFfs;
     const isFfs = rawFfs === true || rawFfs === 1 || String(rawFfs).toLowerCase() === "true" || String(rawFfs) === "1";
 
-    const rateFactor = rateObj?.unitId && unitConversions.value.find((u) => u.id === rateObj.unitId)?.factor
-      ? Number(unitConversions.value.find((u) => u.id === rateObj.unitId)!.factor)
-      : (rateObj?.factor ? Number(rateObj.factor) : 0.001);
+    const rateFactor =
+      rateObj?.unitId && unitConversions.value.find((u) => u.id === rateObj.unitId)?.factor
+        ? Number(unitConversions.value.find((u) => u.id === rateObj.unitId)!.factor)
+        : rateObj?.factor
+          ? Number(rateObj.factor)
+          : 0.001;
 
     const rateVal = rateObj ? (Number(rateObj.salesRate) || 0) * rateFactor : 0;
-    const vatRateVal = rateObj ? Number(rateObj.vatRate) || 0 : (p.vat && Number(p.vat) > 0 ? 15 : 0);
-    const unitVal = rateObj ? (Number(rateObj.vatableValue) || 0) * rateFactor : (rateVal > 0 ? rateVal / (1 + vatRateVal / 100) : 0);
+    const vatRateVal = rateObj ? Number(rateObj.vatRate) || 0 : p.vat && Number(p.vat) > 0 ? 15 : 0;
+    const unitVal = rateObj ? (Number(rateObj.vatableValue) || 0) * rateFactor : rateVal > 0 ? rateVal / (1 + vatRateVal / 100) : 0;
 
     // Determine Mushak 9.1 Note
     let note = "8";
@@ -1102,13 +887,16 @@ const computeSalesAndStatementReports = () => {
   // 2. Group for Statement Report (Tab 4)
   const stmtMap = new Map<string, any>();
   billsWithRates.forEach(({ purchase: p, rateObj, pDate }) => {
-    const rateFactor = rateObj?.unitId && unitConversions.value.find((u) => u.id === rateObj.unitId)?.factor
-      ? Number(unitConversions.value.find((u) => u.id === rateObj.unitId)!.factor)
-      : (rateObj?.factor ? Number(rateObj.factor) : 0.001);
+    const rateFactor =
+      rateObj?.unitId && unitConversions.value.find((u) => u.id === rateObj.unitId)?.factor
+        ? Number(unitConversions.value.find((u) => u.id === rateObj.unitId)!.factor)
+        : rateObj?.factor
+          ? Number(rateObj.factor)
+          : 0.001;
 
     const rateVal = rateObj ? (Number(rateObj.salesRate) || 0) * rateFactor : 0;
     const vatRateVal = rateObj ? Number(rateObj.vatRate) || 0 : 15;
-    const unitVal = rateObj ? (Number(rateObj.vatableValue) || 0) * rateFactor : (rateVal > 0 ? rateVal / (1 + vatRateVal / 100) : 0);
+    const unitVal = rateObj ? (Number(rateObj.vatableValue) || 0) * rateFactor : rateVal > 0 ? rateVal / (1 + vatRateVal / 100) : 0;
     const actDate = rateObj?.activationDate || reportMonthStart || pDate;
     const key = `${p.itemId || p.itemName}_${rateVal}_${actDate}`;
     const pQty = Number(p.totalQty) || 0;
@@ -1180,6 +968,7 @@ const clearClient = () => {
   salesReport.value = [];
   statementReport.value = [];
   eVatCredentials.value = null;
+  currentMonthBill.value = null;
 };
 
 // Item Selection
@@ -1233,7 +1022,20 @@ const exportActiveReport = () => {
   const wb = XLSX.utils.book_new();
 
   if (currentTab.value === "purchases") {
-    const headers = ["Serial", "Item", "HS Code", "Total Qty", "BE No", "BE Date", "Station", "Ass. Value", "Base Value", "SD", "VAT", "AT"];
+    const headers = [
+      "Serial",
+      "Item",
+      "HS Code",
+      "Total Qty",
+      "BE No",
+      "BE Date",
+      "Station",
+      "Ass. Value",
+      "Base Value",
+      "SD",
+      "VAT",
+      "AT"
+    ];
     const makeRows = (list: Purchase[]) =>
       list.map((p, i) => ({
         Serial: i + 1,
@@ -1963,32 +1765,37 @@ onMounted(async () => {
                   </template>
                 </span>
 
-                <span class="text-secondary">|</span>
-
-                <!-- Bill No / Create Bill Inline Link -->
-                <span class="d-inline-flex align-items-center gap-1">
-                  <span>Bill:</span>
-                  <template v-if="currentMonthBill">
-                    <a
-                      href="javascript:void(0)"
-                      class="text-warning font-monospace fw-bold text-decoration-none"
-                      title="View / Print Invoice"
-                      @click="openViewInvoiceModal(currentMonthBill)"
-                    >
-                      {{ currentMonthBill.billNo }}
-                    </a>
-                  </template>
-                  <template v-else>
-                    <a
-                      href="javascript:void(0)"
-                      class="text-info text-decoration-none fw-semibold"
-                      title="Create Bill for this tax month"
-                      @click="openCreateBillModal"
-                    >
-                      Create Bill
-                    </a>
-                  </template>
-                </span>
+                <!-- Bill No / Create Bill Inline Link: Only visible if user plan has billing permission -->
+                <template v-if="canAccessModule('billing')">
+                  <span class="text-secondary">|</span>
+                  <span class="d-inline-flex align-items-center gap-1">
+                    <span>Bill:</span>
+                    <template v-if="currentMonthBill">
+                      <router-link
+                        to="/admin/billing"
+                        target="_blank"
+                        class="text-warning font-monospace fw-bold text-decoration-none"
+                        title="View Bill in Billing Module (New Tab)"
+                      >
+                        {{ currentMonthBill.billNo }}
+                      </router-link>
+                    </template>
+                    <!-- ONLY show Create Bill if submissionId is present -->
+                    <template v-else-if="submissionId">
+                      <router-link
+                        :to="'/admin/billing/create?clientId=' + selectedClientId + '&month=' + selectedMonthYear"
+                        target="_blank"
+                        class="text-info text-decoration-none fw-semibold"
+                        title="Create Bill for this tax month in New Tab"
+                      >
+                        Create Bill
+                      </router-link>
+                    </template>
+                    <template v-else>
+                      <span class="text-muted small" title="Submission required before creating bill">—</span>
+                    </template>
+                  </span>
+                </template>
               </div>
             </div>
             <div class="form-check form-switch d-flex align-items-center gap-2">
@@ -2359,255 +2166,6 @@ onMounted(async () => {
               <span v-if="isSavingSubId" class="spinner-border spinner-border-sm me-1"></span>
               <span>Save ID</span>
             </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- CREATE / EDIT BILL MODAL -->
-    <div v-if="showCreateBillModal" class="modal-backdrop-idp">
-      <div class="modal-dialog-idp" style="max-width: 720px;">
-        <div class="idp-card p-4">
-          <div class="d-flex align-items-center justify-content-between border-bottom border-secondary border-opacity-25 pb-3 mb-3">
-            <div>
-              <h5 class="text-white fw-bold mb-0 d-flex align-items-center gap-2">
-                <i class="bi bi-receipt text-warning"></i>
-                {{ currentMonthBill ? 'Edit Invoice / Bill' : 'Create Invoice / Bill' }}
-              </h5>
-              <div class="text-muted small mt-1">
-                Client: <strong class="text-white">{{ selectedClient?.name }}</strong> | Tax Month: <strong class="text-primary">{{ formatMonth(selectedMonthYear) }}</strong>
-                <span class="badge ms-2" :class="selectedClient?.serviceScope === 'ONLY_RETURN' ? 'bg-info bg-opacity-20 text-info' : 'bg-success bg-opacity-20 text-success'">
-                  Scope: {{ selectedClient?.serviceScope === 'ONLY_RETURN' ? 'Only Return' : 'Full Service' }}
-                </span>
-              </div>
-            </div>
-            <button class="btn btn-sm btn-link text-muted p-0" @click="showCreateBillModal = false">✕</button>
-          </div>
-
-          <div class="py-2" style="max-height: 60vh; overflow-y: auto;">
-            <!-- Bill Metadata -->
-            <div class="row g-2 mb-3">
-              <div class="col-md-6">
-                <label class="form-label text-white small fw-semibold">Invoice Number</label>
-                <input v-model="billForm.billNo" type="text" class="form-control idp-input font-monospace text-warning fw-semibold" />
-              </div>
-              <div class="col-md-6">
-                <label class="form-label text-white small fw-semibold">Invoice Date</label>
-                <input v-model="billForm.billDate" type="date" class="form-control idp-input" />
-              </div>
-            </div>
-
-            <!-- Service Items Section -->
-            <div class="mb-3">
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <label class="form-label text-white small fw-bold mb-0">Bill Service Items</label>
-                <!-- Add More Services Dropdown -->
-                <div class="dropdown">
-                  <button class="btn btn-sm btn-outline-primary dropdown-toggle d-flex align-items-center gap-1" type="button" data-bs-toggle="dropdown">
-                    <i class="bi bi-plus-circle"></i> Add Service
-                  </button>
-                  <ul class="dropdown-menu dropdown-menu-dark shadow-lg">
-                    <li v-for="srv in AVAILABLE_SERVICES" :key="srv.id">
-                      <a class="dropdown-item cursor-pointer py-1.5 small" @click="addBillItem(srv)">
-                        {{ srv.name }} <span class="text-muted">({{ srv.defaultRate }} Tk)</span>
-                      </a>
-                    </li>
-                    <li><hr class="dropdown-divider border-secondary"></li>
-                    <li>
-                      <a class="dropdown-item cursor-pointer py-1.5 small text-primary" @click="addBillItem()">
-                        + Custom Service
-                      </a>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              <!-- Items Table -->
-              <div class="border border-secondary border-opacity-25 rounded p-2 bg-dark bg-opacity-25">
-                <table class="table table-dark table-sm mb-0 align-middle">
-                  <thead>
-                    <tr class="text-muted small">
-                      <th style="width: 45%;">Service Description</th>
-                      <th class="text-center" style="width: 15%;">Qty</th>
-                      <th class="text-end" style="width: 20%;">Rate (Tk)</th>
-                      <th class="text-end" style="width: 15%;">Total</th>
-                      <th class="text-center" style="width: 5%;"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(it, idx) in billForm.items" :key="it.id || idx">
-                      <td>
-                        <input v-model="it.itemName" type="text" class="form-control form-control-sm idp-input" placeholder="Service Name" />
-                      </td>
-                      <td>
-                        <input v-model.number="it.qty" type="number" min="1" class="form-control form-control-sm idp-input text-center font-monospace" @input="updateItemAmount(it)" />
-                      </td>
-                      <td>
-                        <input v-model.number="it.rate" type="number" min="0" class="form-control form-control-sm idp-input text-end font-monospace" @input="updateItemAmount(it)" />
-                      </td>
-                      <td class="text-end font-monospace text-emerald-400 fw-bold">
-                        {{ fmt(it.finalAmount) }}
-                      </td>
-                      <td class="text-center">
-                        <button class="btn btn-sm btn-link text-danger p-0" title="Remove" @click="removeBillItem(idx)">
-                          <i class="bi bi-trash"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Financial Summary Box -->
-            <div class="row g-2 mb-3 bg-dark bg-opacity-40 p-3 rounded border border-secondary border-opacity-25">
-              <div class="col-md-6">
-                <label class="form-label text-white small fw-semibold">Notes / Terms</label>
-                <textarea v-model="billForm.notes" rows="3" class="form-control idp-input small" placeholder="Payment terms or instructions..."></textarea>
-              </div>
-              <div class="col-md-6">
-                <div class="d-flex justify-content-between text-muted small mb-1.5">
-                  <span>Subtotal:</span>
-                  <span class="font-monospace text-white fw-semibold">{{ fmt(billSubtotal) }}</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center text-muted small mb-1.5">
-                  <span>Discount:</span>
-                  <input v-model.number="billForm.discountAmount" type="number" min="0" class="form-control form-control-sm idp-input text-end font-monospace text-warning p-1" style="width: 100px; height: 26px;" />
-                </div>
-                <div class="d-flex justify-content-between align-items-center text-muted small mb-1.5">
-                  <span>Previous Balance / Due:</span>
-                  <input v-model.number="billForm.previousBalance" type="number" class="form-control form-control-sm idp-input text-end font-monospace text-danger p-1" style="width: 100px; height: 26px;" />
-                </div>
-                <div class="d-flex justify-content-between text-white fw-bold border-top border-secondary border-opacity-50 pt-2 fs-6">
-                  <span>Grand Total:</span>
-                  <span class="text-emerald-400 font-monospace fs-5">{{ fmt(billGrandTotal) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="d-flex justify-content-between align-items-center pt-3 mt-3 border-top border-secondary border-opacity-25">
-            <button class="btn btn-outline-secondary px-3" @click="showCreateBillModal = false">
-              Cancel
-            </button>
-            <div class="d-flex gap-2">
-              <button class="btn btn-outline-primary px-3 fw-semibold" @click="saveBill('Draft')">
-                Save as Draft
-              </button>
-              <button class="btn btn-success px-4 fw-semibold" @click="saveBill('Finalized')">
-                <i class="bi bi-check-circle me-1"></i> Finalize Bill
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- VIEW & PRINT INVOICE MODAL -->
-    <div v-if="showViewInvoiceModal && activeViewingBill" class="modal-backdrop-idp">
-      <div class="modal-dialog-idp" style="max-width: 680px;">
-        <div class="idp-card p-4 text-dark" style="background: #ffffff !important; border-radius: 8px;">
-          <!-- Modal Top Control Bar -->
-          <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3 d-print-none">
-            <div class="text-muted small">
-              Invoice: <strong class="text-dark font-monospace">{{ activeViewingBill.billNo }}</strong>
-            </div>
-            <div class="d-flex gap-2">
-              <button class="btn btn-sm btn-primary px-3 fw-semibold" @click="printCurrentInvoice">
-                <i class="bi bi-printer me-1"></i> Print Invoice
-              </button>
-              <button class="btn btn-sm btn-outline-secondary" @click="showViewInvoiceModal = false">✕</button>
-            </div>
-          </div>
-
-          <!-- Printable Area -->
-          <div id="invoicePrintArea" class="p-2">
-            <!-- Invoice Header -->
-            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
-              <div>
-                <h4 class="fw-bold text-primary mb-0">ONE ASSOCIATES</h4>
-                <div class="small text-muted">Income Tax & VAT Consultancy Suite</div>
-                <div class="small text-muted">Dhaka & Chattogram, Bangladesh</div>
-              </div>
-              <div class="text-end">
-                <h5 class="fw-bold mb-1">INVOICE / BILL</h5>
-                <div class="font-monospace fw-bold text-secondary">{{ activeViewingBill.billNo }}</div>
-                <div class="small text-muted">Date: {{ formatDate(activeViewingBill.billDate) }}</div>
-                <div class="small text-muted">Month: {{ formatMonth(activeViewingBill.billingMonth) }}</div>
-              </div>
-            </div>
-
-            <!-- Client Info -->
-            <div class="bg-light p-3 rounded mb-3 border">
-              <div class="row">
-                <div class="col-7">
-                  <div class="small text-muted">BILL TO:</div>
-                  <div class="fw-bold fs-6">{{ activeViewingBill.clientName }}</div>
-                  <div class="small text-muted font-monospace">BIN: {{ activeViewingBill.clientBin || 'N/A' }}</div>
-                </div>
-                <div class="col-5 text-end">
-                  <div class="small text-muted">PAYMENT STATUS:</div>
-                  <span class="badge" :class="activeViewingBill.status === 'Paid' ? 'bg-success' : 'bg-warning text-dark'">
-                    {{ activeViewingBill.status }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Itemized Table -->
-            <table class="table table-bordered table-sm mb-3">
-              <thead class="table-light">
-                <tr>
-                  <th class="text-center" style="width: 45px;">#</th>
-                  <th>Service Description</th>
-                  <th class="text-center" style="width: 70px;">Qty</th>
-                  <th class="text-end" style="width: 110px;">Rate (Tk)</th>
-                  <th class="text-end" style="width: 120px;">Amount (Tk)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(it, idx) in activeViewingBill.items" :key="idx">
-                  <td class="text-center text-muted font-monospace">{{ idx + 1 }}</td>
-                  <td class="fw-medium">{{ it.itemName }}</td>
-                  <td class="text-center font-monospace">{{ it.qty }}</td>
-                  <td class="text-end font-monospace">{{ fmt(it.rate) }}</td>
-                  <td class="text-end font-monospace fw-bold">{{ fmt(it.finalAmount) }}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <!-- Calculation Breakdown -->
-            <div class="row justify-content-end mb-4">
-              <div class="col-6">
-                <div class="d-flex justify-content-between small mb-1">
-                  <span>Subtotal:</span>
-                  <span class="font-monospace fw-semibold">{{ fmt(activeViewingBill.subtotal) }}</span>
-                </div>
-                <div v-if="activeViewingBill.discountAmount > 0" class="d-flex justify-content-between small mb-1 text-danger">
-                  <span>Discount:</span>
-                  <span class="font-monospace">-{{ fmt(activeViewingBill.discountAmount) }}</span>
-                </div>
-                <div v-if="activeViewingBill.previousBalance > 0" class="d-flex justify-content-between small mb-1 text-muted">
-                  <span>Previous Dues:</span>
-                  <span class="font-monospace">{{ fmt(activeViewingBill.previousBalance) }}</span>
-                </div>
-                <div class="d-flex justify-content-between fw-bold border-top pt-2 fs-6 text-primary">
-                  <span>Total Payable:</span>
-                  <span class="font-monospace">{{ fmt(activeViewingBill.grandTotal) }} Tk</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Notes & Signature -->
-            <div class="row mt-5 pt-3 border-top">
-              <div class="col-8">
-                <div class="small text-muted fw-semibold">Note / Terms:</div>
-                <div class="small text-muted">{{ activeViewingBill.notes || 'Thank you for your business.' }}</div>
-              </div>
-              <div class="col-4 text-center">
-                <div class="border-top border-dark pt-1 small fw-bold">Authorized Signature</div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

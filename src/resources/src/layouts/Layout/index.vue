@@ -2,22 +2,30 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import Header from "./Header.vue";
 import WalletRechargeModal from "@/components/WalletRechargeModal.vue";
+import BuyStorageModal from "@/components/BuyStorageModal.vue";
 import { useAuthStore } from "@/stores/auth";
 
 const showContactModal = ref(false);
 const showRechargeModal = ref(false);
+const showStorageModal = ref(false);
 const authStore = useAuthStore();
 
 const handleOpenRecharge = () => {
   showRechargeModal.value = true;
 };
 
+const handleOpenStorage = () => {
+  showStorageModal.value = true;
+};
+
 onMounted(() => {
   window.addEventListener("open-wallet-recharge", handleOpenRecharge);
+  window.addEventListener("open-buy-storage", handleOpenStorage);
 });
 
 onUnmounted(() => {
   window.removeEventListener("open-wallet-recharge", handleOpenRecharge);
+  window.removeEventListener("open-buy-storage", handleOpenStorage);
 });
 
 const isSuperAdmin = computed(() => {
@@ -39,14 +47,24 @@ const showSubscriptionAlert = computed(() => {
   if (!user || !user.planId) return false;
   return !user.isSubscriptionActive || (user.shortage && user.shortage > 0);
 });
+
+const showStorageAlert = computed(() => {
+  if (!isTenantAdmin.value) return false;
+  const user = authStore.user as any;
+  if (!user || !user.isSubscriptionActive) return false;
+  return user.isStorageWarning === true || (user.storageUsagePercent && user.storageUsagePercent >= 90);
+});
 </script>
 
 <template>
   <div class="idp-layout-wrapper">
     <!-- Top Navigation Header (Horizontal Line & Left/Right Vertical Lines) -->
-    <Header @open-recharge="showRechargeModal = true" />
+    <Header
+      @open-recharge="showRechargeModal = true"
+      @open-storage="showStorageModal = true"
+    />
 
-    <!-- Subscription Alert Banner for Insufficient Balance / Inactive Subscription -->
+    <!-- 1. Subscription Alert Banner for Insufficient Balance / Inactive Subscription -->
     <div
       v-if="showSubscriptionAlert"
       class="bg-danger bg-opacity-10 border-bottom border-danger py-2.5 px-3 text-white"
@@ -55,7 +73,7 @@ const showSubscriptionAlert = computed(() => {
         <div class="d-flex align-items-center gap-3 small">
           <i class="bi bi-exclamation-triangle-fill text-danger fs-5 flex-shrink-0"></i>
           <div class="d-flex flex-wrap align-items-center gap-2">
-            <span class="badge bg-danger text-white px-2.5 py-1 fw-bold">Insufficient Balance</span>
+            <span class="badge bg-danger text-white px-2.5 py-1 fw-bold">Subscription Inactive</span>
             <span>
               To activate your selected plan <strong>{{ (authStore.user as any)?.plan?.name || 'Standard' }}</strong> (৳{{ (authStore.user as any)?.planPrice || 0 }}), 
               a recharge of <strong class="text-warning">৳{{ (authStore.user as any)?.shortage || 0 }}</strong> is required. Current Wallet Balance: <strong>৳{{ ((authStore.user as any)?.advanceBalance || 0).toLocaleString() }}</strong>.
@@ -69,6 +87,36 @@ const showSubscriptionAlert = computed(() => {
         >
           <i class="bi bi-wallet2 fs-6"></i>
           <span>Recharge Wallet</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. Storage Alert Banner for 90%+ Storage Usage -->
+    <div
+      v-else-if="showStorageAlert"
+      class="bg-warning bg-opacity-10 border-bottom border-warning py-2.5 px-3 text-white"
+    >
+      <div class="idp-grid-container d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3 small">
+          <i class="bi bi-hdd-stack-fill text-warning fs-5 flex-shrink-0"></i>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="badge bg-warning text-dark px-2.5 py-1 fw-bold">
+              {{ (authStore.user as any)?.isStorageExhausted ? 'Storage 100% Full' : 'Storage 90%+ Warning' }}
+            </span>
+            <span>
+              Database storage is <strong>{{ (authStore.user as any)?.storageUsagePercent || 90 }}%</strong> full 
+              (<strong class="font-monospace text-warning">{{ (authStore.user as any)?.usedStorageMB || 0 }} MB / {{ (authStore.user as any)?.totalStorageMB || 1024 }} MB</strong>). 
+              Purchase extra lifetime space (৳1,000 / 1 GB) to avoid upload disruption.
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn btn-sm btn-primary text-white fw-bold px-3 py-1.5 shadow-sm d-inline-flex align-items-center gap-2 flex-shrink-0"
+          @click="showStorageModal = true"
+        >
+          <i class="bi bi-plus-circle-fill fs-6"></i>
+          <span>Buy Extra Storage</span>
         </button>
       </div>
     </div>
@@ -186,6 +234,9 @@ const showSubscriptionAlert = computed(() => {
 
     <!-- Wallet Recharge Modal for Tenants -->
     <WalletRechargeModal v-model="showRechargeModal" />
+
+    <!-- Buy Extra Storage Modal for Tenants -->
+    <BuyStorageModal v-model="showStorageModal" @open-recharge="showRechargeModal = true" />
   </div>
 </template>
 

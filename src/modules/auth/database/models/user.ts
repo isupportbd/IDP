@@ -19,6 +19,7 @@ export const users = pgTable("users", {
   adminId: integer("admin_id"),
   permissions: json("permissions").$type<string[]>().default([]),
   expDate: timestamp("exp_date"),
+  extraStorageMB: integer("extra_storage_mb").notNull().default(0),
   emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull()

@@ -270,6 +270,10 @@ export const login: Handler = async (c: any) => {
     await revokeCurrentRefreshToken(c);
     const tokens = await issueTokens(c, user, { remember: !!body.remember });
 
+    try {
+      await db.update(users).set({ updatedAt: new Date() }).where(eq(users.id, user.id));
+    } catch { }
+
     return c.json(
       {
         message: "User logged in successfully",
@@ -317,12 +321,24 @@ export const me: Handler = async (c: any) => {
 };
 
 /**
- * Why: Revokes current refresh token and clears auth cookies.
+ * Why: Revokes current refresh token, sets user offline, and clears auth cookies.
  * When: Used when the active device logs out.
  * Where: POST auth logout route.
  */
 export const logout: Handler = async (c: any) => {
   try {
+    const auth = c.get("auth") || c.get("user");
+    if (auth && auth.id) {
+      const userId = Number(auth.id);
+      try {
+        await db.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
+        // Immediately mark user offline by setting updatedAt to 1 hour ago
+        const pastTime = new Date(Date.now() - 3600 * 1000);
+        await db.update(users).set({ updatedAt: pastTime }).where(eq(users.id, userId));
+      } catch (err) {
+        console.error("Error updating logout status:", err);
+      }
+    }
     await revokeCurrentRefreshToken(c);
     cookie.deleteAuth(c);
     cookie.deleteRefresh(c);
@@ -542,11 +558,19 @@ export const refreshToken: Handler = async (c: any) => {
  */
 export const logoutAllDevices: Handler = async (c: any) => {
   try {
-    const auth = c.get("auth");
+    const auth = c.get("auth") || c.get("user");
 
-    if (!auth) return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+    if (!auth || !auth.id) return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
 
-    await db.delete(refreshTokens).where(eq(refreshTokens.userId, auth.id));
+    const userId = Number(auth.id);
+    try {
+      await db.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
+      const pastTime = new Date(Date.now() - 3600 * 1000);
+      await db.update(users).set({ updatedAt: pastTime }).where(eq(users.id, userId));
+    } catch (err) {
+      console.error("Logout all devices error:", err);
+    }
+
     cookie.deleteAuth(c);
     cookie.deleteRefresh(c);
 
@@ -699,18 +723,31 @@ export const getUserStats: Handler = async (c: any) => {
     }
     const userList = Array.from(uniqueMap.values());
 
+    // Fetch active unrevoked refresh tokens to know which users actually have a live logged-in session
+    const activeTokens = await db.query.refreshTokens.findMany({
+      where: and(
+        eq(refreshTokens.revoked, false),
+        gt(refreshTokens.expiresAt, new Date())
+      )
+    });
+    const loggedInUserIds = new Set(activeTokens.map((t: any) => Number(t.userId)));
+    // Always include the current requesting user
+    loggedInUserIds.add(currentUserId);
+
     const now = new Date().getTime();
     let activeCount = 0;
     let onlineCount = 0;
 
     const formattedUsers = userList.map((u: any) => {
+      const isSelf = u.id === currentUserId;
+      const hasActiveSession = isSelf || loggedInUserIds.has(u.id);
+      const isStatusActive = u.status === "active";
+
       const lastActiveTime = u.updatedAt ? new Date(u.updatedAt).getTime() : 0;
       const diffMinutes = lastActiveTime > 0 ? (now - lastActiveTime) / (1000 * 60) : 999999;
 
-      const isSelf = u.id === currentUserId;
-      const isStatusActive = u.status === "active";
-      const isActive = isSelf || (diffMinutes <= 5 && isStatusActive);
-      const isOnline = isSelf || (diffMinutes <= 30 && isStatusActive);
+      const isActive = hasActiveSession && isStatusActive && (isSelf || diffMinutes <= 5);
+      const isOnline = hasActiveSession && isStatusActive && (isSelf || diffMinutes <= 30);
 
       if (isActive) activeCount++;
       if (isOnline) onlineCount++;
@@ -861,6 +898,163 @@ export const sendTestSms: Handler = async (c: any) => {
   } catch (err: any) {
     console.error("sendTestSms error:", err);
     return c.json({ success: false, message: err.message || "Failed to dispatch test SMS" }, 500);
+  }
+};
+
+/**
+ * Why: Allows a Tenant to purchase extra permanent storage add-on (1 GB = ৳1,000).
+ * When: Storage reaches 90%+ or tenant wants to expand database quota.
+ * Where: POST /api/auth/buy-storage route.
+ * Rule: Subscription plan MUST be active to purchase extra storage.
+ */
+export const buyStorage: Handler = async (c: any) => {
+  try {
+    const auth = c.get("auth");
+    if (!auth || !auth.id) {
+      return c.json({ success: false, message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, Number(auth.id)));
+    if (!user) {
+      return c.json({ success: false, message: "User not found" }, HttpStatusCodes.NOT_FOUND);
+    }
+
+    const tenantAdminId = user.adminId ? Number(user.adminId) : user.id;
+    const [tenantAdmin] = await db.select().from(users).where(eq(users.id, tenantAdminId));
+    if (!tenantAdmin) {
+      return c.json({ success: false, message: "Tenant Admin record not found" }, HttpStatusCodes.NOT_FOUND);
+    }
+
+    // Strict Rule: Subscription plan MUST be active to purchase storage
+    const isSubscriptionActive = !!(tenantAdmin.expDate && new Date(tenantAdmin.expDate) > new Date());
+    if (!isSubscriptionActive) {
+      return c.json(
+        {
+          success: false,
+          isSubscriptionInactive: true,
+          message: "Subscription plan is currently expired or inactive. Extra storage can only be purchased while subscription is active. Please renew your plan first."
+        },
+        HttpStatusCodes.FORBIDDEN
+      );
+    }
+
+    const body = await c.req.json();
+    const gigabytes = Math.max(1, Number(body?.gigabytes) || 1);
+    const ratePerGb = 1000;
+    const totalRequiredAmount = gigabytes * ratePerGb;
+    const paymentSource = body?.paymentSource || "wallet";
+    const trxId = body?.trxId ? String(body.trxId).trim() : "";
+
+    if (paymentSource === "wallet") {
+      const currentBalance = tenantAdmin.advanceBalance || 0;
+      if (currentBalance < totalRequiredAmount) {
+        const shortage = totalRequiredAmount - currentBalance;
+        return c.json(
+          {
+            success: false,
+            shortage,
+            advanceBalance: currentBalance,
+            requiredAmount: totalRequiredAmount,
+            message: `Insufficient wallet balance. Total cost: ৳${totalRequiredAmount}, Current balance: ৳${currentBalance}. Shortage: ৳${shortage}. Please recharge your wallet first.`
+          },
+          HttpStatusCodes.BAD_REQUEST
+        );
+      }
+
+      // Deduct from wallet & credit extra storage immediately
+      const newBalance = currentBalance - totalRequiredAmount;
+      const extraStorageAddedMB = gigabytes * 1024;
+      const newExtraStorageMB = (tenantAdmin.extraStorageMB || 0) + extraStorageAddedMB;
+
+      await db
+        .update(users)
+        .set({
+          advanceBalance: newBalance,
+          extraStorageMB: newExtraStorageMB,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, tenantAdminId));
+
+      await db.insert(subscriptionTransactions).values({
+        userId: tenantAdminId,
+        planId: tenantAdmin.planId || null,
+        type: "storage_addon",
+        billingCycle: tenantAdmin.billingCycle || "monthly",
+        grossAmount: totalRequiredAmount,
+        gatewayCharge: 0,
+        netAmount: -totalRequiredAmount,
+        planRate: totalRequiredAmount,
+        paidAmount: totalRequiredAmount,
+        status: "completed",
+        note: `Purchased ${gigabytes} GB (+${extraStorageAddedMB} MB) extra storage add-on from prepaid wallet`
+      });
+
+      return c.json({
+        success: true,
+        message: `Successfully purchased ${gigabytes} GB extra storage! New total storage updated.`,
+        gigabytes,
+        extraStorageMB: newExtraStorageMB,
+        advanceBalance: newBalance
+      });
+    } else {
+      if (!trxId) {
+        return c.json({ success: false, message: "bKash TrxID is required for manual payment" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
+      }
+
+      const [paymentConfig] = await db.select().from(paymentSettings).limit(1);
+      const chargePercent = paymentConfig?.bkashCharge ?? 1.8;
+      const gatewayCharge = Math.round((totalRequiredAmount * chargePercent) / 100);
+      const netAmount = totalRequiredAmount - gatewayCharge;
+
+      const [inserted] = await db
+        .insert(subscriptionTransactions)
+        .values({
+          userId: tenantAdminId,
+          planId: tenantAdmin.planId || null,
+          type: "storage_addon",
+          billingCycle: tenantAdmin.billingCycle || "monthly",
+          grossAmount: totalRequiredAmount,
+          gatewayCharge,
+          netAmount,
+          planRate: totalRequiredAmount,
+          paidAmount: totalRequiredAmount,
+          trxId,
+          paymentMethod: "bkash",
+          status: "pending",
+          note: `Extra storage purchase (${gigabytes} GB) request awaiting verification`
+        })
+        .returning();
+
+      try {
+        broadcast(
+          "tenant:recharge",
+          {
+            transactionId: inserted.id,
+            userId: tenantAdminId,
+            userName: tenantAdmin.name,
+            userEmail: tenantAdmin.email,
+            paidAmount: totalRequiredAmount,
+            gatewayCharge,
+            netAmount,
+            trxId,
+            type: "storage_addon",
+            createdAt: inserted.createdAt
+          },
+          { roles: ["superadmin"], all: true }
+        );
+      } catch (bErr) {
+        console.error("Broadcast storage request error:", bErr);
+      }
+
+      return c.json({
+        success: true,
+        message: "Storage purchase request submitted successfully! Awaiting verification.",
+        transactionId: inserted.id
+      });
+    }
+  } catch (err: any) {
+    console.error("buyStorage error:", err);
+    return c.json({ success: false, message: err.message || "Failed to process storage purchase" }, 500);
   }
 };
 

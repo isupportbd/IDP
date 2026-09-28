@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { authMiddleware } from "@/middlewares/auth-middleware.js";
+import { subscriptionMiddleware } from "@/middlewares/subscription-middleware.js";
 import {
   listPurchases,
   deletePurchase,
@@ -10,7 +11,7 @@ import {
 
 const purchasesRouter = new Hono();
 
-purchasesRouter.use("*", authMiddleware);
+purchasesRouter.use("*", authMiddleware, subscriptionMiddleware);
 
 purchasesRouter.get("/months", getPurchasesMonths);
 purchasesRouter.get("/", listPurchases);

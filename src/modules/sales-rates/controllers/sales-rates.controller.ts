@@ -10,9 +10,9 @@ import { users } from "@/modules/auth/database/models/user.js";
 // ── 1. LIST SALES RATES ───────────────────────────────────────────────
 export const listSalesRates: Handler = async (c: any) => {
   try {
-    const user = c.get("user");
-    const role = user?.role;
-    const adminId = user?.adminId || user?.id || 1;
+    const auth = c.get("auth") || c.get("user");
+    const role = auth?.role;
+    const adminId = auth?.adminId || auth?.id;
 
     const query = c.req.valid("query") || {};
     const page = Number(query.page || 1);
@@ -128,11 +128,10 @@ export const listSalesRates: Handler = async (c: any) => {
 // ── 2. CREATE SALES RATE ──────────────────────────────────────────────
 export const createSalesRate: Handler = async (c: any) => {
   try {
-    const user = c.get("user");
-    let adminId = user?.adminId || user?.id;
+    const auth = c.get("auth") || c.get("user");
+    let adminId = auth?.adminId || auth?.id;
     if (!adminId) {
-      const u = await db.select({ id: users.id }).from(users).limit(1);
-      adminId = u[0]?.id || 19;
+      return c.json({ success: false, message: "Unauthorized: tenant admin required" }, HttpStatusCodes.UNAUTHORIZED);
     }
     const body = c.req.valid("json");
 
@@ -141,7 +140,7 @@ export const createSalesRate: Handler = async (c: any) => {
     const unitId = body.unitId ? Number(body.unitId) : null;
     const salesRate = Number(body.salesRate);
     const vatRate = Number(body.vatRate);
-    const additionPercent = body.additionPercent !== undefined ? Number(body.additionPercent) : 0;
+    const additionPercent = body.additionPercent !== undefined ? Number(body.additionPercent) : 36;
     const status = body.status || "Active";
     const activationDate = body.activationDate;
 

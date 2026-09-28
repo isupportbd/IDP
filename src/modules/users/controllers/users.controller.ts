@@ -1,8 +1,8 @@
-import { and, asc, eq, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, ne, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import { HttpStatusCodes, password } from "@/framework/facade.js";
 import { db } from "@/framework/database/connection.js";
-import { users } from "@/modules/auth/database/models/user.js";
+import { refreshTokens, users } from "@/modules/auth/database/models/user.js";
 import { roles } from "@/modules/auth/database/models/role.js";
 import { plans } from "@/modules/superadmin/database/models/plans.js";
 
@@ -38,7 +38,7 @@ export const listUsers: Handler = async (c: any) => {
       return c.json({ message: "Unauthorized" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
-    const { isSuperAdmin, tenantAdminId } = tenantInfo;
+    const { currentUser, isSuperAdmin, tenantAdminId } = tenantInfo;
 
     const userList = await db
       .select({
@@ -61,6 +61,18 @@ export const listUsers: Handler = async (c: any) => {
       )
       .orderBy(asc(users.id));
 
+    // Fetch active session tokens
+    const activeTokens = await db.query.refreshTokens.findMany({
+      where: and(
+        eq(refreshTokens.revoked, false),
+        gt(refreshTokens.expiresAt, new Date())
+      )
+    });
+    const loggedInUserIds = new Set(activeTokens.map((t: any) => Number(t.userId)));
+    const currentUserId = Number(currentUser.id);
+    loggedInUserIds.add(currentUserId);
+    const now = Date.now();
+
     // Get all roles map
     const allRoles = await db.select().from(roles);
     const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
@@ -68,6 +80,23 @@ export const listUsers: Handler = async (c: any) => {
     const data = userList.map((u) => {
       const roleName = roleMap.get(u.roleId || 0) || "user";
       const normalizedRole = roleName === "superadmin" || roleName === "admin" ? "admin" : "user";
+      const isSelf = u.id === currentUserId;
+      const hasActiveSession = isSelf || loggedInUserIds.has(u.id);
+      const isStatusActive = u.status === "active";
+      const lastActiveTime = u.updatedAt ? new Date(u.updatedAt).getTime() : 0;
+      const diffMinutes = lastActiveTime > 0 ? (now - lastActiveTime) / (1000 * 60) : 999999;
+
+      let lastActive = "Offline";
+      if (hasActiveSession && isStatusActive && (isSelf || diffMinutes <= 5)) {
+        lastActive = "Just now";
+      } else if (hasActiveSession && isStatusActive && (isSelf || diffMinutes <= 30)) {
+        lastActive = `${Math.floor(diffMinutes)}m ago`;
+      } else if (lastActiveTime > 0 && diffMinutes < 1440) {
+        lastActive = `${Math.floor(diffMinutes / 60)}h ago`;
+      } else if (lastActiveTime > 0) {
+        lastActive = `${Math.floor(diffMinutes / 1440)}d ago`;
+      }
+
       return {
         id: u.id,
         name: u.name,
@@ -77,7 +106,7 @@ export const listUsers: Handler = async (c: any) => {
         status: u.status || "active",
         permissions: Array.isArray(u.permissions) ? u.permissions : [],
         createdAt: u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : "—",
-        lastActive: "Just now",
+        lastActive,
         lastPage: "—"
       };
     });
@@ -106,7 +135,7 @@ export const createUser: Handler = async (c: any) => {
     const rawPassword = String(body.password || "");
     const requestedRole = body.role === "admin" ? "admin" : "user";
     const status = body.status === "inactive" ? "inactive" : "active";
-    const permissionsList = Array.isArray(body.permissions) ? body.permissions : [];
+    const permissionsList = Array.isArray(body.permissions) ? body.permissions : ["activity_filter", "submissions", "sales_rates", "reports"];
 
     if (!name) return c.json({ message: "Full name is required." }, HttpStatusCodes.BAD_REQUEST);
     if (!email || !email.includes("@")) return c.json({ message: "Valid email is required." }, HttpStatusCodes.BAD_REQUEST);
@@ -130,12 +159,18 @@ export const createUser: Handler = async (c: any) => {
           const countResult = await db
             .select({ count: sql<number>`count(*)::int` })
             .from(users)
-            .where(or(eq(users.id, tenantAdminId), eq(users.adminId, tenantAdminId)));
+            .where(
+              and(
+                eq(users.adminId, tenantAdminId),
+                ne(users.id, tenantAdminId),
+                eq(users.status, "active")
+              )
+            );
           const currentUsersCount = countResult[0]?.count || 0;
           if (currentUsersCount >= plan.maxUsers) {
             return c.json(
               {
-                message: `User limit reached (${currentUsersCount}/${plan.maxUsers}) for your subscription plan (${plan.name}). Please upgrade your plan.`
+                message: `Active sub-user limit reached (${currentUsersCount}/${plan.maxUsers}) for your subscription plan (${plan.name}). Please inactivate a former staff member from the User & Staff list or upgrade your plan to add more staff.`
               },
               HttpStatusCodes.FORBIDDEN
             );
@@ -223,6 +258,9 @@ export const updateUser: Handler = async (c: any) => {
     if (body.mobile !== undefined) updateData.mobile = String(body.mobile).trim();
     if (body.status) updateData.status = body.status;
     if (body.permissions !== undefined) updateData.permissions = body.permissions;
+    if (body.password && String(body.password).trim().length >= 6) {
+      updateData.password = await password.hashPassword(String(body.password).trim());
+    }
 
     if (body.email) {
       const email = String(body.email).trim().toLowerCase();
@@ -308,6 +346,38 @@ export const updateUserStatus: Handler = async (c: any) => {
     }
 
     const newStatus = body.status ? body.status : (targetUser.status === "active" ? "inactive" : "active");
+
+    // If activating a previously inactive user, verify plan active user limit
+    if (newStatus === "active" && targetUser.status !== "active" && !isSuperAdmin) {
+      const tenantAdmin = await db.query.users.findFirst({
+        where: eq(users.id, tenantAdminId)
+      });
+      if (tenantAdmin?.planId) {
+        const [plan] = await db.select().from(plans).where(eq(plans.id, tenantAdmin.planId));
+        if (plan) {
+          const countResult = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(users)
+            .where(
+              and(
+                eq(users.adminId, tenantAdminId),
+                ne(users.id, tenantAdminId),
+                eq(users.status, "active")
+              )
+            );
+          const currentActiveCount = countResult[0]?.count || 0;
+          if (currentActiveCount >= plan.maxUsers) {
+            return c.json(
+              {
+                message: `Cannot activate sub-user. Active sub-user limit reached (${currentActiveCount}/${plan.maxUsers}) for your subscription plan (${plan.name}). Please inactivate another staff account first or upgrade your plan.`
+              },
+              HttpStatusCodes.FORBIDDEN
+            );
+          }
+        }
+      }
+    }
+
     await db.update(users).set({ status: newStatus, updatedAt: new Date() }).where(eq(users.id, userId));
 
     return c.json({ success: true, message: `User status changed to ${newStatus}`, status: newStatus }, HttpStatusCodes.OK);

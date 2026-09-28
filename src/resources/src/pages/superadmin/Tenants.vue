@@ -252,14 +252,14 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- 0. PENDING WALLET RECHARGES QUEUE -->
+    <!-- 0. PENDING WALLET RECHARGES & STORAGE REQUESTS QUEUE -->
     <div v-if="pendingRecharges.length > 0" class="table-card p-4 mb-4 border-info shadow-lg">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h6 class="text-info fw-bold mb-0 d-flex align-items-center gap-2">
-          <i class="bi bi-wallet2 fs-5"></i> Pending Wallet Recharges & bKash TrxID Verification
+          <i class="bi bi-wallet2 fs-5"></i> Pending Recharges & Storage Requests (bKash TrxID Verification)
         </h6>
         <span class="badge bg-info text-dark px-3 py-1.5 fw-bold rounded-pill">
-          {{ pendingRecharges.length }} Awaiting Recharge Approval
+          {{ pendingRecharges.length }} Awaiting Verification
         </span>
       </div>
 
@@ -267,7 +267,7 @@ onUnmounted(() => {
         <table class="table-custom mb-0">
           <thead>
             <tr>
-              <th>Tenant / Organization</th>
+              <th>Tenant / Request Type</th>
               <th>Contact Info</th>
               <th>Amount Sent (Gross)</th>
               <th>bKash Fee & Net Credit</th>
@@ -279,7 +279,23 @@ onUnmounted(() => {
           <tbody>
             <tr v-for="r in pendingRecharges" :key="r.id">
               <td>
-                <div class="fw-bold text-white fs-6">{{ r.userName || 'Tenant' }}</div>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="fw-bold text-white fs-6">{{ r.userName || 'Tenant' }}</div>
+                  <span
+                    v-if="r.type === 'storage_addon'"
+                    class="badge text-white px-2 py-0.5"
+                    style="font-size: 0.68rem; background-color: #7952b3 !important;"
+                  >
+                    <i class="bi bi-hdd-network me-1"></i>Extra Storage
+                  </span>
+                  <span
+                    v-else
+                    class="badge bg-info text-dark px-2 py-0.5"
+                    style="font-size: 0.68rem;"
+                  >
+                    <i class="bi bi-wallet2 me-1"></i>Recharge
+                  </span>
+                </div>
                 <span class="badge bg-secondary bg-opacity-25 text-light border border-secondary" style="font-size: 0.7rem;">
                   Tenant ID: #{{ r.userId }}
                 </span>

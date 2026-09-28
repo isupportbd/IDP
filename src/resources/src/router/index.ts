@@ -297,9 +297,14 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     }
   }
 
-  // 4. Tenant Management routes (User & Staff, Assignments) - only accessible to Firm Admin & SuperAdmin
+  // 4. Block SuperAdmin from accessing any tenant business / admin routes
+  if (hasRole("superadmin") && to.path.startsWith("/admin")) {
+    return { path: "/" };
+  }
+
+  // 5. Tenant Management routes (User & Staff, Assignments) - only accessible to Firm Admin
   if (to.path.startsWith("/admin/users") || to.path.startsWith("/admin/assignments")) {
-    if (!hasRole("superadmin") && !isTenantAdmin()) {
+    if (!isTenantAdmin()) {
       return { path: "/" };
     }
   }

@@ -94,7 +94,7 @@ const form = ref({
   unitId: 1 as number,
   salesRate: "" as string | number,
   vatRate: 15.00 as number,
-  additionPercent: 0.00 as number,
+  additionPercent: 36.00 as number,
   activationDate: todayDate,
   status: "Active" as "Active" | "Frozen"
 });
@@ -334,7 +334,7 @@ const openAddModal = () => {
     unitId: unitsList.value[0]?.id || 1,
     salesRate: "",
     vatRate: 15.00,
-    additionPercent: 0.00,
+    additionPercent: 36.00,
     activationDate: todayDate,
     status: "Active"
   };

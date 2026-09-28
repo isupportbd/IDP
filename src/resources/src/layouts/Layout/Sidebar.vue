@@ -141,7 +141,7 @@
             </li>
 
             <!-- 3. Billing & Invoice -->
-            <li v-if="hasAccountsAccess && canAccessModule('billing')" class="list-group-item" :class="{ active: isActive('/admin/billing') }">
+            <li v-if="canAccessModule('billing')" class="list-group-item" :class="{ active: isActive('/admin/billing') }">
               <router-link to="/admin/billing">
                 <div class="menu-icon">
                   <i class="bi bi-receipt-cutoff"></i>
@@ -256,7 +256,7 @@ import { computed, onBeforeUnmount, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { useAdminUiStore } from "@/stores/admin-ui";
 import { useAuthStore } from "@/stores/auth";
-import { hasRole, isTenantAdmin, canAccessModule } from "@/composables/useAuth";
+import { hasRole, isTenantAdmin, canAccessModule, hasAccountsAccess } from "@/composables/useAuth";
 
 const props = defineProps<{ onToggleSidebar: () => void; }>();
 
@@ -266,18 +266,8 @@ const route = useRoute();
 
 const isSuperAdmin = computed(() => hasRole("superadmin"));
 
-const hasAccountsAccess = computed(() => {
-  if (isSuperAdmin.value) return true;
-  const user = authStore.user as any;
-  if (!user) return true;
-  if (user.plan) {
-    return user.plan.hasAccounts !== false;
-  }
-  return true;
-});
-
 const hasAnyAdminPlatformItem = computed(() => {
-  return isTenantAdmin() || (hasAccountsAccess.value && canAccessModule('billing')) || canAccessModule('settings');
+  return isTenantAdmin() || (hasAccountsAccess() && canAccessModule('billing')) || canAccessModule('settings');
 });
 
 function isActive(path: string) {

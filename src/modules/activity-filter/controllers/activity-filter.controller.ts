@@ -99,24 +99,29 @@ export const getActivityMatrix: Handler = async (c: any) => {
     }
 
     // 3. Fetch purchase totals per client for this month
-    let purchasesMap: Record<number, number> = {};
+    let purchasesMap: Record<number, { totalBaseValue: number; beCount: number }> = {};
     if (activeClientIds.length > 0) {
       const clientPurchases = await db
         .select({
           clientId: purchases.clientId,
-          totalBaseValue: sql<number>`COALESCE(SUM(${purchases.baseValueOfVat}), 0)`
+          totalBaseValue: sql<number>`COALESCE(SUM(${purchases.baseValueOfVat}), 0)`,
+          beCount: sql<number>`COUNT(DISTINCT COALESCE(NULLIF(${purchases.beNo}, ''), ${purchases.id}::text))`
         })
         .from(purchases)
         .where(
           and(
             inArray(purchases.clientId, activeClientIds),
-            eq(purchases.month, taxPeriod)
+            eq(purchases.month, taxPeriod),
+            isSuperAdmin ? undefined : eq(purchases.adminId, tenantAdminId)
           )
         )
         .groupBy(purchases.clientId);
 
       clientPurchases.forEach((p) => {
-        purchasesMap[p.clientId] = Number(p.totalBaseValue) || 0;
+        purchasesMap[p.clientId] = {
+          totalBaseValue: Number(p.totalBaseValue) || 0,
+          beCount: Number(p.beCount) || 0
+        };
       });
     }
 
@@ -124,7 +129,9 @@ export const getActivityMatrix: Handler = async (c: any) => {
     const matrixClients = activeClients.map((client) => {
       const submission = submissionsMap[client.id] || null;
       const isSubmitted = Boolean(submission?.submissionId);
-      const purchaseAmount = purchasesMap[client.id] !== undefined ? purchasesMap[client.id] : 0;
+      const purchaseInfo = purchasesMap[client.id] || { totalBaseValue: 0, beCount: 0 };
+      const purchaseAmount = purchaseInfo.totalBaseValue;
+      const beCount = purchaseInfo.beCount;
 
       return {
         id: client.id,
@@ -143,6 +150,7 @@ export const getActivityMatrix: Handler = async (c: any) => {
         reference: client.referenceName || "Direct Acquisition",
         taxPeriod: taxPeriod,
         purchaseAmount: purchaseAmount,
+        beCount: beCount,
         isSubmitted: isSubmitted,
         submission: submission
           ? {
@@ -169,6 +177,7 @@ export const getActivityMatrix: Handler = async (c: any) => {
     const totalFiledCount = matrixClients.filter((c) => c.isSubmitted).length;
     const totalUnfiledCount = matrixClients.filter((c) => !c.isSubmitted).length;
     const totalPurchaseSum = matrixClients.reduce((acc, c) => acc + (c.purchaseAmount || 0), 0);
+    const totalBeCount = matrixClients.reduce((acc, c) => acc + (c.beCount || 0), 0);
 
     // 5. Fetch Client Types & References for filter dropdowns
     const allTypes = await db
@@ -199,7 +208,8 @@ export const getActivityMatrix: Handler = async (c: any) => {
           inactiveUnfiledClients: inactiveUnfiledCount,
           totalFiledClients: totalFiledCount,
           totalUnfiledClients: totalUnfiledCount,
-          totalPurchaseSum
+          totalPurchaseSum,
+          totalBeCount
         },
         clientTypes: allTypes,
         references: allRefs
