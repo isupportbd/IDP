@@ -41,6 +41,15 @@ const envSchema = z
       .transform((value) => value?.trim() || undefined),
     MAIL_USERNAME: z.string().default(""),
     MAIL_PASSWORD: z.string().default(""),
+    SUPERADMIN_EMAIL: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    SUPERADMIN_PASSWORD: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || undefined),
+    SUPERADMIN_NAME: z.string().default("Super Admin"),
     OPEN_API: z
       .string()
       .default("true")

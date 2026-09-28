@@ -1,13 +1,15 @@
+import bcrypt from "bcryptjs";
 import { initDatabase } from "../framework/database/connection.js";
 import { db } from "../framework/facade.js";
 import { sql, eq } from "drizzle-orm";
 import { plans } from "../modules/superadmin/database/models/plans.js";
 import { paymentSettings } from "../modules/superadmin/database/models/payment_settings.js";
 import { users } from "../modules/auth/database/models/user.js";
+import { roles } from "../modules/auth/database/models/role.js";
 
 async function main() {
   await initDatabase();
-  console.log("Setting up SuperAdmin & Tenant Subscription database tables in PostgreSQL...");
+  console.log("Setting up SuperAdmin & Subscription database tables in PostgreSQL...");
 
   // 1. Create tables if not exist
   await db.execute(sql`
@@ -73,6 +75,7 @@ async function main() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_id INTEGER;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'::jsonb;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS exp_date TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS extra_storage_mb INTEGER NOT NULL DEFAULT 0;
 
     ALTER TABLE subscription_transactions ADD COLUMN IF NOT EXISTS type VARCHAR(30) NOT NULL DEFAULT 'deposit';
     ALTER TABLE subscription_transactions ADD COLUMN IF NOT EXISTS gross_amount INTEGER NOT NULL DEFAULT 0;
@@ -84,10 +87,10 @@ async function main() {
     UPDATE users SET trx_id = TRIM(REGEXP_REPLACE(trx_id, '\\s*\\((monthly|yearly|m|y)\\)', '', 'gi')) WHERE trx_id IS NOT NULL;
   `);
 
-  // 3. Seed real plans
+  // 3. Seed real plans if not exist
   const existingPlans = await db.select().from(plans);
   if (existingPlans.length === 0) {
-    console.log("Seeding real subscription plans...");
+    console.log("Seeding subscription plans...");
     await db.insert(plans).values([
       {
         name: "Standard Firm Plan",
@@ -140,7 +143,7 @@ async function main() {
   // 4. Seed Payment Config
   const existingPayment = await db.select().from(paymentSettings);
   if (existingPayment.length === 0) {
-    console.log("Seeding default bKash payment settings...");
+    console.log("Seeding default payment settings...");
     await db.insert(paymentSettings).values({
       bkashNumber: "01719950891",
       bkashCharge: 1.8,
@@ -148,25 +151,53 @@ async function main() {
     });
   }
 
-  // 5. Seed a pending tenant registration to test approvals with real data
-  const existingPending = await db.select().from(users).where(eq(users.status, "pending"));
-  if (existingPending.length === 0) {
-    const [firstPlan] = await db.select().from(plans).limit(1);
-    console.log("Seeding a real pending tenant registration for verification...");
-    await db.insert(users).values({
-      name: "Chittagong Tax & VAT Solutions",
-      email: "ctg.vatsolutions@gmail.com",
-      mobile: "01812998877",
-      password: "$2a$10$abcdefghijklmnopqrstuvwxyz123456", // test hash
-      status: "pending",
-      planId: firstPlan?.id || 1,
-      trxId: "8N4B2C9X (monthly)",
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
+  // 5. Dynamic SuperAdmin Account Setup from .env (Zero hardcoding)
+  const superadminEmail = process.env.SUPERADMIN_EMAIL?.trim()?.toLowerCase();
+  const superadminPassword = process.env.SUPERADMIN_PASSWORD;
+  const superadminName = process.env.SUPERADMIN_NAME || "Super Admin";
+
+  if (superadminEmail && superadminPassword) {
+    // Ensure roles table exists and has superadmin role
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING;
+    `);
+
+    const [superadminRole] = await db.select().from(roles).where(eq(roles.name, "superadmin")).limit(1);
+    const hashedPassword = await bcrypt.hash(superadminPassword, 10);
+
+    const existingAdmin = await db.select().from(users).where(eq(users.email, superadminEmail)).limit(1);
+    if (existingAdmin.length > 0) {
+      console.log(`[SuperAdmin Sync] Updating credentials for ${superadminEmail} from .env...`);
+      await db.update(users).set({
+        name: superadminName,
+        password: hashedPassword,
+        roleId: superadminRole?.id || existingAdmin[0].roleId,
+        status: "active",
+        updatedAt: new Date()
+      }).where(eq(users.email, superadminEmail));
+    } else {
+      console.log(`[SuperAdmin Sync] Creating new SuperAdmin account for ${superadminEmail} from .env...`);
+      await db.insert(users).values({
+        name: superadminName,
+        email: superadminEmail,
+        password: hashedPassword,
+        roleId: superadminRole?.id,
+        status: "active",
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
+  } else {
+    console.log("[SuperAdmin Sync] No SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD set in .env. Skipping superadmin user creation.");
   }
 
-  console.log("SuperAdmin & Subscription database initialization complete!");
+  console.log("SuperAdmin & database initialization complete!");
   process.exit(0);
 }
 
