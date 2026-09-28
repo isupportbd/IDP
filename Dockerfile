@@ -20,6 +20,7 @@ FROM oven/bun:${BUN_VERSION} AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV APP_PORT=3000
 
 # Production dependencies
 COPY package.json ./
@@ -37,9 +38,9 @@ COPY tsconfig.json ./
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
-EXPOSE 80 3000
+EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD bun --eval "fetch(\`http://localhost:\${process.env.APP_PORT || 80}/health\`).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD bun --eval "fetch(\`http://localhost:\${process.env.APP_PORT || process.env.PORT || 3000}/health\`).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["/bin/sh", "/app/docker-entrypoint.sh"]
