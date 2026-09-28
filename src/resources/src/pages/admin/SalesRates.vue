@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
 import axios from "axios";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 interface SalesRate {
   id: number;
@@ -104,19 +105,19 @@ const modalFilteredClients = computed(() => {
   if (!clientSearchText.value.trim()) return [];
   const q = clientSearchText.value.toLowerCase().trim();
   return clientsList.value.filter(
-    (c) => c.name.toLowerCase().includes(q) || c.bin.toLowerCase().includes(q)
+    (c) => (c.name || "").toLowerCase().includes(q) || (c.bin || "").toLowerCase().includes(q)
   );
 });
 
-// Modal Items: ONLY client's purchased items (if no purchases, list is completely empty)
+// Modal Items: ONLY client's purchased items, filtered strictly on typing (typing-only autocomplete)
 const modalFilteredItems = computed(() => {
   if (!form.value.clientId) return [];
-  if (!itemSearchText.value.trim()) {
-    return clientPurchasedItems.value.slice(0, 50);
+  if (!itemSearchText.value.trim() || form.value.itemId) {
+    return [];
   }
   const q = itemSearchText.value.toLowerCase().trim();
   return clientPurchasedItems.value.filter(
-    (i) => i.name.toLowerCase().includes(q) || i.hsCode.toLowerCase().includes(q)
+    (i) => i.name.toLowerCase().includes(q) || (i.hsCode && i.hsCode.toLowerCase().includes(q))
   ).slice(0, 50);
 });
 
@@ -305,13 +306,15 @@ const handleClientBlur = () => {
 
 const handleItemInput = () => {
   form.value.itemId = "";
-  if (form.value.clientId) {
+  if (form.value.clientId && itemSearchText.value.trim().length > 0) {
     showItemDropdown.value = true;
+  } else {
+    showItemDropdown.value = false;
   }
 };
 
 const handleItemFocus = () => {
-  if (!isEditing.value && form.value.clientId) {
+  if (!isEditing.value && form.value.clientId && itemSearchText.value.trim().length > 0 && !form.value.itemId) {
     showItemDropdown.value = true;
   }
 };
@@ -502,16 +505,13 @@ onMounted(async () => {
       <!-- Left Filters -->
       <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1">
         <!-- Search Input -->
-        <div class="position-relative flex-grow-1" style="min-width: 240px; max-width: 320px;">
-          <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm idp-input"
-            style="padding: 0 14px 0 38px !important; height: 38px;"
-            placeholder="Search client, BIN, item, HS code..."
-          />
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search client, BIN, item, HS code..."
+          max-width="320px"
+          min-width="240px"
+          size="md"
+        />
 
         <!-- Client Filter -->
         <div style="min-width: 190px;">
@@ -770,7 +770,7 @@ onMounted(async () => {
 
                   <!-- Item Autocomplete Dropdown -->
                   <div
-                    v-if="showItemDropdown && !isEditing && form.clientId"
+                    v-if="showItemDropdown && !isEditing && form.clientId && itemSearchText.trim().length > 0"
                     class="position-absolute start-0 top-100 w-100 mt-1 bg-dark border border-secondary rounded shadow-lg"
                     style="max-height: 220px; overflow-y: auto; z-index: 1050;"
                   >

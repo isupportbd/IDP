@@ -2,8 +2,8 @@
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
-import * as XLSX from "xlsx";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const router = useRouter();
 const toast = useToast();
@@ -23,7 +23,7 @@ const currentPage = ref(1);
 const pageSize = ref(15);
 
 // ── Sample Template Download ─────────────────────────────────
-const downloadSampleTemplate = () => {
+const downloadSampleTemplate = async () => {
   const sampleData = [
     {
       "Company Name": "ABC Traders Ltd.",
@@ -65,6 +65,7 @@ const downloadSampleTemplate = () => {
     }
   ];
 
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(sampleData);
   ws["!cols"] = [
     { wch: 26 }, // Company Name
@@ -127,8 +128,9 @@ const parseFile = (file: File) => {
   currentPage.value = 1;
 
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
+      const XLSX = await import("xlsx");
       const data = new Uint8Array(e.target?.result as ArrayBuffer);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -416,18 +418,11 @@ const handleConfirmUpload = async () => {
 
         <div class="d-flex align-items-center gap-2 flex-grow-1 justify-content-end" style="max-width: 480px;">
           <!-- In-table Search -->
-          <div class="search-box position-relative flex-grow-1" style="max-width: 300px;">
-            <i class="bi bi-search search-icon"></i>
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="form-control form-control-sm idp-search-input"
-              placeholder="Search in preview..."
-            />
-            <button v-if="searchQuery" class="clear-btn" type="button" @click="searchQuery = ''">
-              <i class="bi bi-x"></i>
-            </button>
-          </div>
+          <SearchInput
+            v-model="searchQuery"
+            placeholder="Search in preview..."
+            max-width="300px"
+          />
 
           <!-- Page size selector -->
           <select

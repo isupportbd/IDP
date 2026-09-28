@@ -1,6 +1,6 @@
-<script setup lang="ts">
 import { ref, computed } from "vue";
 import { useAuthStore } from "@/stores/auth";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const authStore = useAuthStore();
 const activeRoleTab = ref<"superadmin" | "admin" | "user">("superadmin");
@@ -214,18 +214,12 @@ const handleSaveMatrix = () => {
           <span class="text-muted small">Toggle or inspect functional capabilities for each role</span>
         </div>
 
-        <div class="d-flex align-items-center gap-2" style="max-width: 320px; width: 100%;">
-          <div class="position-relative w-100">
-            <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              class="form-control form-control-sm idp-input" 
-              style="padding-left: 36px !important;" 
-              placeholder="Search module or feature..." 
-            />
-          </div>
-        </div>
+        <SearchInput 
+          v-model="searchQuery" 
+          placeholder="Search module or feature..." 
+          max-width="320px"
+          min-width="240px"
+        />
       </div>
 
       <!-- Matrix Table -->

@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
 import { pulse } from "@/plugins/pulse";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -113,7 +114,7 @@ const handleSave = async () => {
   }
 
   const numericRate = parseFloat(form.value.vatRate.toString());
-  if (isNaN(numericRate) || numericRate < 0) {
+  if (Number.isNaN(numericRate) || numericRate < 0) {
     formError.value = "Please enter a valid non-negative VAT rate percentage.";
     return;
   }
@@ -211,15 +212,7 @@ const handleDelete = async (n: VatNote) => {
 
     <!-- Search Toolbar -->
     <div v-if="notes.length > 0 || searchQuery" class="d-flex gap-2 mb-3">
-      <div class="position-relative flex-grow-1" style="max-width: 320px;">
-        <i class="bi bi-search position-absolute top-50 translate-middle-y ms-3 text-muted"></i>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="form-control form-control-sm ps-5 idp-input"
-          placeholder="Search rate %, note name..."
-        />
-      </div>
+      <SearchInput v-model="searchQuery" placeholder="Search rate %, note name..." max-width="320px" />
     </div>
 
     <!-- Table Card (Consistent design tokens) -->

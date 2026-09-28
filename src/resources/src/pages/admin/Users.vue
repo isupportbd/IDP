@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import axios from "axios";
 import { useAuthStore } from "@/stores/auth";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -410,16 +411,13 @@ onMounted(async () => {
       <!-- Left: Search Input, Role Filter, Status Filter -->
       <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1" style="max-width: 800px;">
         <!-- Search Input -->
-        <div class="position-relative flex-grow-1" style="min-width: 220px;">
-          <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm idp-input"
-            style="padding: 0 14px 0 40px !important; height: 38px;"
-            placeholder="Search name, email, mobile..."
-          />
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search name, email, mobile..."
+          max-width="280px"
+          min-width="220px"
+          size="md"
+        />
 
         <!-- Role Filter Dropdown -->
         <div style="min-width: 150px;">

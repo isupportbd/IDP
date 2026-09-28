@@ -2,11 +2,12 @@
 import { ref, onMounted, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
-import * as XLSX from "xlsx";
+import ConfirmModal from "@/components/common/ConfirmModal.vue";
 import { useClientsApi, type ClientItem, type AssignableUser } from "@/composables/useClientsApi";
 import { useServicesApi, type CustomerType, type ClientReference } from "@/composables/useServicesApi";
 import { useToast } from "@/composables/useToast";
 import { useSubscriptionGuard } from "@/composables/useSubscriptionGuard";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const router = useRouter();
 const toast = useToast();
@@ -45,31 +46,42 @@ const selectedTypeFilter = ref<number | "all">("all");
 const selectedReferenceFilter = ref<number | "all">("all");
 const selectedStatusFilter = ref<"all" | "true" | "false">("all");
 const currentPage = ref(1);
-const itemsPerPage = 15;
+const itemsPerPage = 10;
+
+const totalPages = computed(() => Math.ceil(totalCount.value / itemsPerPage) || 1);
 
 const selectedClientDetails = ref<ClientItem | null>(null);
 const deleteTarget = ref<ClientItem | null>(null);
 const showDetailsModal = ref(false);
 const showDeleteModal = ref(false);
 const isSubmitting = ref(false);
+let searchTimeout: any = null;
+
+const fetchClientsList = async () => {
+  try {
+    await fetchClients({
+      search: searchQuery.value.trim(),
+      customerTypeId: selectedTypeFilter.value !== "all" ? selectedTypeFilter.value : undefined,
+      referenceId: selectedReferenceFilter.value !== "all" ? selectedReferenceFilter.value : undefined,
+      isActive: selectedStatusFilter.value,
+      page: currentPage.value,
+      limit: itemsPerPage
+    });
+  } catch (err: any) {
+    toast.error("Failed to load clients");
+  }
+};
 
 const loadData = async () => {
   try {
     await Promise.all([
-      fetchClients({
-        search: searchQuery.value,
-        customerTypeId: selectedTypeFilter.value !== "all" ? selectedTypeFilter.value : undefined,
-        referenceId: selectedReferenceFilter.value !== "all" ? selectedReferenceFilter.value : undefined,
-        isActive: selectedStatusFilter.value,
-        page: currentPage.value,
-        limit: itemsPerPage
-      }),
+      fetchClientsList(),
       fetchCustomerTypes(),
       fetchReferences(),
       fetchAssignableUsers()
     ]);
   } catch (err: any) {
-    toast.error("Failed to load clients");
+    toast.error("Failed to load initial client data");
   }
 };
 
@@ -77,8 +89,21 @@ onMounted(() => {
   loadData();
 });
 
-watch([searchQuery, selectedTypeFilter, selectedReferenceFilter, selectedStatusFilter, currentPage], () => {
-  loadData();
+watch(searchQuery, () => {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    currentPage.value = 1;
+    fetchClientsList();
+  }, 250);
+});
+
+watch([selectedTypeFilter, selectedReferenceFilter, selectedStatusFilter], () => {
+  currentPage.value = 1;
+  fetchClientsList();
+});
+
+watch(currentPage, () => {
+  fetchClientsList();
 });
 
 const openDetailsModal = (client: ClientItem) => {
@@ -164,18 +189,12 @@ const handleConfirmDelete = async () => {
     <div class="filter-panel p-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
       <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1">
         <!-- Integrated Search Box -->
-        <div class="search-box position-relative" style="min-width: 240px; max-width: 320px;">
-          <i class="bi bi-search search-icon"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm idp-search-input"
-            placeholder="Search by Company, BIN, Mobile..."
-          />
-          <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search by Company, BIN, Mobile..."
+          max-width="320px"
+          min-width="220px"
+        />
 
         <!-- 1. Customer Type Filter -->
         <select v-model="selectedTypeFilter" class="idp-select" style="width: auto; min-width: 170px;">
@@ -358,6 +377,54 @@ const handleConfirmDelete = async () => {
       </table>
     </div>
 
+    <!-- Pagination for Clients -->
+    <div v-if="totalCount > 0" class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-2">
+      <span class="text-muted small">
+        Showing <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> to
+        <strong>{{ Math.min(currentPage * itemsPerPage, totalCount) }}</strong> of
+        <strong>{{ totalCount }}</strong> clients
+      </span>
+
+      <div v-if="totalPages > 1" class="d-flex align-items-center gap-1">
+        <button
+          type="button"
+          class="btn btn-dark border-secondary btn-sm"
+          :disabled="currentPage <= 1"
+          @click="currentPage--"
+        >
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+
+        <template v-for="p in totalPages" :key="p">
+          <button
+            v-if="p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)"
+            type="button"
+            class="btn btn-sm"
+            :class="currentPage === p ? 'btn-primary' : 'btn-dark border-secondary text-muted'"
+            style="min-width: 32px;"
+            @click="currentPage = p"
+          >
+            {{ p }}
+          </button>
+          <span
+            v-else-if="p === currentPage - 3 || p === currentPage + 3"
+            class="text-muted px-1"
+          >
+            ...
+          </span>
+        </template>
+
+        <button
+          type="button"
+          class="btn btn-dark border-secondary btn-sm"
+          :disabled="currentPage >= totalPages"
+          @click="currentPage++"
+        >
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+
     <!-- ── MODAL: CLIENT DETAILS ────────────────────────────────── -->
     <div
       v-if="showDetailsModal && selectedClientDetails"
@@ -434,38 +501,16 @@ const handleConfirmDelete = async () => {
     </div>
 
     <!-- ── MODAL: CONFIRM DELETE ────────────────────────────────── -->
-    <div
-      v-if="showDeleteModal && deleteTarget"
-      class="modal fade show d-block"
-      tabindex="-1"
-      style="background: rgba(0, 0, 0, 0.75);"
-    >
-      <div class="modal-dialog modal-dialog-centered modal-md">
-        <div class="modal-content idp-card text-center p-4">
-          <i class="bi bi-shield-exclamation text-danger fs-1 mb-2"></i>
-          <h5 class="text-white fw-bold">Delete Client Account?</h5>
-          <p class="text-muted small mb-2">
-            Are you sure you want to remove <strong>{{ deleteTarget.companyName }}</strong>?
-          </p>
-          <div class="p-2 mb-3 bg-dark bg-opacity-50 border border-secondary border-opacity-25 rounded text-start small text-warning">
-            <i class="bi bi-info-circle me-1"></i>
-            <strong>Audit & Accounting Rule:</strong> If this client has any past invoices, bills, payments, purchases, or VAT returns, permanent deletion will be prevented to protect your ledger balance. In that case, you can simply <strong>Deactivate / Release</strong> the client.
-          </div>
-          <div class="d-flex justify-content-center gap-2">
-            <button type="button" class="btn btn-idp-secondary btn-sm px-3" @click="showDeleteModal = false">Cancel</button>
-            <button
-              type="button"
-              class="btn btn-danger btn-sm px-3"
-              :disabled="isSubmitting"
-              @click="handleConfirmDelete"
-            >
-              <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-1"></span>
-              Confirm Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ConfirmModal
+      :is-open="showDeleteModal && !!deleteTarget"
+      title="Delete Client Account?"
+      :description="`Are you sure you want to remove '${deleteTarget?.companyName}'? If this client has past transactions, deletion will be prevented to protect accounting ledgers.`"
+      confirm-text="Confirm Delete"
+      :loading="isSubmitting"
+      :is-danger="true"
+      @confirm="handleConfirmDelete"
+      @close="showDeleteModal = false"
+    />
   </div>
 </template>
 

@@ -4,6 +4,7 @@ import { useClientsApi, type ClientManagerAssignment, type AssignableUser } from
 import { useServicesApi, type CustomerType, type ClientReference } from "@/composables/useServicesApi";
 import { useToast } from "@/composables/useToast";
 import ManagersMultiSelect from "@/components/common/ManagersMultiSelect.vue";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 const {
@@ -126,6 +127,32 @@ const stats = computed(() => {
     shared: list.filter((c) => (c.managerIds || []).length > 1).length,
     unassigned: list.filter((c) => !c.managerIds || c.managerIds.length === 0).length
   };
+});
+
+// Pagination State (10 items per page)
+const currentPage = ref(1);
+const itemsPerPage = 10;
+
+const totalPages = computed(() => Math.ceil(filteredAssignments.value.length / itemsPerPage) || 1);
+
+const paginatedAssignments = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  return filteredAssignments.value.slice(start, start + itemsPerPage);
+});
+
+// Shared Tab Pagination State
+const sharedCurrentPage = ref(1);
+const sharedTotalPages = computed(() => Math.ceil(sharedClientsList.value.length / itemsPerPage) || 1);
+
+const paginatedSharedClients = computed(() => {
+  const start = (sharedCurrentPage.value - 1) * itemsPerPage;
+  return sharedClientsList.value.slice(start, start + itemsPerPage);
+});
+
+// Reset page on filter changes
+watch([selectedTypeFilter, selectedReferenceFilter, activeFilter, searchQuery], () => {
+  currentPage.value = 1;
+  sharedCurrentPage.value = 1;
 });
 </script>
 
@@ -254,18 +281,12 @@ const stats = computed(() => {
       <div class="filter-panel p-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1">
           <!-- Integrated Search Box -->
-          <div class="search-box position-relative" style="min-width: 240px; max-width: 300px;">
-            <i class="bi bi-search search-icon"></i>
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="form-control form-control-sm idp-search-input"
-              placeholder="Search by client name, BIN, or mobile..."
-            />
-            <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">
-              <i class="bi bi-x"></i>
-            </button>
-          </div>
+          <SearchInput
+            v-model="searchQuery"
+            placeholder="Search by client name, BIN, or mobile..."
+            max-width="300px"
+            min-width="220px"
+          />
 
           <!-- Customer Type Filter -->
           <select v-model="selectedTypeFilter" class="form-select form-select-sm idp-select" style="width: auto; min-width: 160px;">
@@ -345,7 +366,7 @@ const stats = computed(() => {
               </td>
             </tr>
 
-            <tr v-for="client in filteredAssignments" :key="client.id">
+            <tr v-for="client in paginatedAssignments" :key="client.id">
               <!-- Client Info -->
               <td>
                 <div class="fw-semibold text-white mb-1">{{ client.companyName }}</div>
@@ -412,6 +433,54 @@ const stats = computed(() => {
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination for Customer Assignments -->
+      <div v-if="filteredAssignments.length > 0" class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-2">
+        <span class="text-muted small">
+          Showing <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> to
+          <strong>{{ Math.min(currentPage * itemsPerPage, filteredAssignments.length) }}</strong> of
+          <strong>{{ filteredAssignments.length }}</strong> clients
+        </span>
+
+        <div v-if="totalPages > 1" class="d-flex align-items-center gap-1">
+          <button
+            type="button"
+            class="btn btn-dark border-secondary btn-sm"
+            :disabled="currentPage <= 1"
+            @click="currentPage--"
+          >
+            <i class="bi bi-chevron-left"></i> Prev
+          </button>
+
+          <template v-for="p in totalPages" :key="p">
+            <button
+              v-if="p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)"
+              type="button"
+              class="btn btn-sm"
+              :class="currentPage === p ? 'btn-primary' : 'btn-dark border-secondary text-muted'"
+              style="min-width: 32px;"
+              @click="currentPage = p"
+            >
+              {{ p }}
+            </button>
+            <span
+              v-else-if="p === currentPage - 3 || p === currentPage + 3"
+              class="text-muted px-1"
+            >
+              ...
+            </span>
+          </template>
+
+          <button
+            type="button"
+            class="btn btn-dark border-secondary btn-sm"
+            :disabled="currentPage >= totalPages"
+            @click="currentPage++"
+          >
+            Next <i class="bi bi-chevron-right"></i>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- ── TAB 2: SHARED CUSTOMERS (DEDICATED VIEW) ───────────── -->
@@ -452,7 +521,7 @@ const stats = computed(() => {
                 </td>
               </tr>
 
-              <tr v-for="sc in sharedClientsList" :key="sc.id">
+              <tr v-for="sc in paginatedSharedClients" :key="sc.id">
                 <td>
                   <router-link :to="`/admin/clients/${sc.id}/edit`" class="fw-semibold text-white text-decoration-none hover-primary mb-1 d-block">
                     {{ sc.companyName }}
@@ -496,6 +565,54 @@ const stats = computed(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Shared Clients Pagination -->
+        <div v-if="sharedClientsList.length > 0" class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-2">
+          <span class="text-muted small">
+            Showing <strong>{{ (sharedCurrentPage - 1) * itemsPerPage + 1 }}</strong> to
+            <strong>{{ Math.min(sharedCurrentPage * itemsPerPage, sharedClientsList.length) }}</strong> of
+            <strong>{{ sharedClientsList.length }}</strong> shared clients
+          </span>
+
+          <div v-if="sharedTotalPages > 1" class="d-flex align-items-center gap-1">
+            <button
+              type="button"
+              class="btn btn-dark border-secondary btn-sm"
+              :disabled="sharedCurrentPage <= 1"
+              @click="sharedCurrentPage--"
+            >
+              <i class="bi bi-chevron-left"></i> Prev
+            </button>
+
+            <template v-for="p in sharedTotalPages" :key="p">
+              <button
+                v-if="p === 1 || p === sharedTotalPages || (p >= sharedCurrentPage - 2 && p <= sharedCurrentPage + 2)"
+                type="button"
+                class="btn btn-sm"
+                :class="sharedCurrentPage === p ? 'btn-primary' : 'btn-dark border-secondary text-muted'"
+                style="min-width: 32px;"
+                @click="sharedCurrentPage = p"
+              >
+                {{ p }}
+              </button>
+              <span
+                v-else-if="p === sharedCurrentPage - 3 || p === sharedCurrentPage + 3"
+                class="text-muted px-1"
+              >
+                ...
+              </span>
+            </template>
+
+            <button
+              type="button"
+              class="btn btn-dark border-secondary btn-sm"
+              :disabled="sharedCurrentPage >= sharedTotalPages"
+              @click="sharedCurrentPage++"
+            >
+              Next <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>

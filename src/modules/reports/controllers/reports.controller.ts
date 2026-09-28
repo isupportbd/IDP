@@ -19,13 +19,13 @@ export const getMonthlySummary = async (c: Context) => {
     const rawSql = sql`
       SELECT 
         c.id as "clientId",
-        COALESCE(c.company_name, c.name) as "clientName",
+        c.company_name as "clientName",
         c.bin_number as "clientBin",
         SUM(COALESCE(p.net_wt, 0)) as "totalNetWt"
       FROM clients c
       INNER JOIN purchases p ON c.id = p.client_id
       WHERE p.month = ${month}
-      GROUP BY c.id, c.company_name, c.name, c.bin_number
+      GROUP BY c.id, c.company_name, c.bin_number
       ORDER BY "clientName" ASC
     `;
 

@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from "vue";
 import axios from "axios";
 import MonthNavigator from "@/components/MonthNavigator.vue";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -250,15 +251,13 @@ onMounted(async () => {
     <div class="idp-card p-3 mb-4">
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
         <!-- Left: Search Box -->
-        <div class="position-relative flex-grow-1" style="min-width: 200px;">
-          <i class="bi bi-search position-absolute top-50 translate-middle-y ms-3 text-muted"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm idp-input ps-5"
-            placeholder="Search BE No, Item, HS Code, BIN, LC No..."
-          />
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search BE No, Item, HS Code, BIN, LC No..."
+          max-width="380px"
+          min-width="220px"
+          :debounce="250"
+        />
 
         <!-- Middle-Left: Reference Filter -->
         <div style="width: 170px;">

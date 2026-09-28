@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
 import { pulse } from "@/plugins/pulse";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -127,7 +128,7 @@ const isSameUnit = computed(() => {
 
 const computedReverseFactor = computed(() => {
   const f = parseFloat(form.value.factor.toString());
-  if (!f || isNaN(f) || f <= 0) return null;
+  if (!f || Number.isNaN(f) || f <= 0) return null;
   return Math.round((1 / f) * 100000000) / 100000000;
 });
 
@@ -186,7 +187,7 @@ const handleSave = async () => {
   }
 
   const factorNum = parseFloat(form.value.factor.toString());
-  if (isNaN(factorNum) || factorNum <= 0) {
+  if (Number.isNaN(factorNum) || factorNum <= 0) {
     formError.value = "Conversion Factor must be a positive number.";
     toast.error(formError.value);
     return;
@@ -283,15 +284,7 @@ const handleDelete = async (u: UnitConversion) => {
 
     <!-- Search Toolbar -->
     <div v-if="units.length > 0 || searchQuery" class="d-flex gap-2 mb-3">
-      <div class="position-relative flex-grow-1" style="max-width: 320px;">
-        <i class="bi bi-search position-absolute top-50 translate-middle-y ms-3 text-muted"></i>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="form-control form-control-sm ps-5 idp-input"
-          placeholder="Search unit, multiplier..."
-        />
-      </div>
+      <SearchInput v-model="searchQuery" placeholder="Search unit, multiplier..." max-width="320px" />
     </div>
 
     <!-- Table Card (Consistent design tokens) -->

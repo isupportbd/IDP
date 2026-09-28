@@ -49,7 +49,9 @@ export async function sessionMiddleware(c: Context, next: Next) {
   }
 
   c.set("sessionId", sessionId);
-  await session.refresh(sessionId);
+  if (redisConfig.enabled) {
+    await session.refresh(sessionId);
+  }
   await next();
 }
 

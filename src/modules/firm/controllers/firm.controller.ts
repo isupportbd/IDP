@@ -27,7 +27,7 @@ export const updateCompanySettings: Handler = async (c: any) => {
     const body = c.req.valid("json");
     let existing = (await db.select().from(companySettings).limit(1))[0];
 
-    let result;
+    let result: any = null;
     if (existing) {
       result = (await db.update(companySettings)
         .set({

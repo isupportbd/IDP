@@ -1,6 +1,6 @@
 import { asc, desc, eq } from "drizzle-orm";
 import type { Handler } from "hono";
-import { broadcast, db, HttpStatusCodes } from "@/framework/facade.js";
+import { broadcast, cache, db, HttpStatusCodes } from "@/framework/facade.js";
 import { customerTypes } from "../database/models/customer_types.js";
 import { clientReferences } from "../database/models/references.js";
 import { serviceItems } from "../database/models/service_items.js";
@@ -8,6 +8,7 @@ import { serviceRates } from "../database/models/service_rates.js";
 
 function notifySettingsUpdated(settingType: string) {
   try {
+    cache.forget(`master:${settingType}`);
     broadcast("global:settings-updated", { type: settingType, timestamp: Date.now() }, { all: true, auth: true });
   } catch (err) {
     console.error(`Failed to broadcast ${settingType} update:`, err);
@@ -18,7 +19,9 @@ function notifySettingsUpdated(settingType: string) {
 
 export const listCustomerTypes: Handler = async (c: any) => {
   try {
-    const list = await db.select().from(customerTypes).orderBy(desc(customerTypes.id));
+    const list = await cache.remember("master:client-types", 3600, async () => {
+      return await db.select().from(customerTypes).orderBy(desc(customerTypes.id));
+    });
     return c.json({ message: "Customer types fetched successfully", data: list }, HttpStatusCodes.OK);
   } catch (err: any) {
     return c.json({ message: err.message || "Failed to fetch customer types" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
@@ -70,7 +73,9 @@ export const toggleCustomerType: Handler = async (c: any) => {
 
 export const listReferences: Handler = async (c: any) => {
   try {
-    const list = await db.select().from(clientReferences).orderBy(asc(clientReferences.id));
+    const list = await cache.remember("master:references", 3600, async () => {
+      return await db.select().from(clientReferences).orderBy(asc(clientReferences.id));
+    });
     return c.json({ message: "References fetched successfully", data: list }, HttpStatusCodes.OK);
   } catch (err: any) {
     return c.json({ message: err.message || "Failed to fetch references" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
@@ -168,7 +173,9 @@ export const toggleReference: Handler = async (c: any) => {
 
 export const listServiceItems: Handler = async (c: any) => {
   try {
-    const list = await db.select().from(serviceItems).orderBy(asc(serviceItems.id));
+    const list = await cache.remember("master:service-items", 3600, async () => {
+      return await db.select().from(serviceItems).orderBy(asc(serviceItems.id));
+    });
     return c.json({ message: "Service items fetched successfully", data: list }, HttpStatusCodes.OK);
   } catch (err: any) {
     return c.json({ message: err.message || "Failed to fetch service items" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
@@ -260,12 +267,14 @@ export const deleteServiceItem: Handler = async (c: any) => {
 
 export const listServiceRates: Handler = async (c: any) => {
   try {
-    const rates = await db.query.serviceRates.findMany({
-      with: {
-        serviceItem: true,
-        customerType: true
-      },
-      orderBy: (rates, { desc }) => [desc(rates.id)]
+    const rates = await cache.remember("master:service-rates", 3600, async () => {
+      return await db.query.serviceRates.findMany({
+        with: {
+          serviceItem: true,
+          customerType: true
+        },
+        orderBy: (rates, { desc }) => [desc(rates.id)]
+      });
     });
 
     return c.json({ message: "Service rates fetched successfully", data: rates }, HttpStatusCodes.OK);

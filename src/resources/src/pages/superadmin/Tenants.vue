@@ -7,6 +7,7 @@ import {
   type Tenant,
   type PendingSignup
 } from "@/composables/useSuperAdminApi";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const router = useRouter();
 
@@ -498,18 +499,12 @@ onUnmounted(() => {
           </div>
 
           <!-- Search Box -->
-          <div class="search-box position-relative" style="width: 240px;">
-            <i class="bi bi-search search-icon"></i>
-            <input
-              v-model="searchTerm"
-              type="text"
-              class="form-control form-control-sm idp-search-input"
-              placeholder="Search tenant or email..."
-            />
-            <button v-if="searchTerm" class="clear-btn" @click="searchTerm = ''">
-              <i class="bi bi-x"></i>
-            </button>
-          </div>
+          <SearchInput
+            v-model="searchTerm"
+            placeholder="Search tenant or email..."
+            max-width="260px"
+            min-width="180px"
+          />
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
 import { pulse } from "@/plugins/pulse";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -199,16 +200,8 @@ const deleteType = async (t: ClientType) => {
     </div>
 
     <!-- Search Toolbar -->
-    <div v-if="clientTypes.length > 0" class="d-flex gap-2 mb-3">
-      <div class="position-relative flex-grow-1" style="max-width: 320px;">
-        <i class="bi bi-search position-absolute top-50 translate-middle-y ms-3 text-muted"></i>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="form-control form-control-sm ps-5 idp-input"
-          placeholder="Search client types..."
-        />
-      </div>
+    <div v-if="clientTypes.length > 0 || searchQuery" class="d-flex gap-2 mb-3">
+      <SearchInput v-model="searchQuery" placeholder="Search client types..." max-width="320px" />
     </div>
 
     <!-- Table Card -->

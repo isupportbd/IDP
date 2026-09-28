@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
 import { pulse } from "@/plugins/pulse";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -397,15 +398,12 @@ const deleteArea = async (a: AreaItem) => {
           <option v-for="l in locations" :key="l.id" :value="l.id">{{ l.name }}</option>
         </select>
 
-        <div class="position-relative flex-grow-1" style="max-width: 280px;">
-          <i class="bi bi-search position-absolute top-50 translate-middle-y ms-3 text-muted"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm ps-5 idp-input"
-            :placeholder="activeTab === 'locations' ? 'Search locations...' : 'Search areas...'"
-          />
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          :placeholder="activeTab === 'locations' ? 'Search locations...' : 'Search areas...'"
+          max-width="280px"
+          min-width="220px"
+        />
       </div>
     </div>
 

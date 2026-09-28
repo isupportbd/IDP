@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Handler } from "hono";
-import { db, HttpStatusCodes } from "@/framework/facade.js";
+import { db, getDefaultTaxPeriod, getSubmissionDeadline, HttpStatusCodes, resolveTenantContext } from "@/framework/facade.js";
 import { clients } from "@/modules/clients/database/models/clients.js";
 import { clientManagers } from "@/modules/clients/database/models/client_managers.js";
 import { vatSubmissions } from "@/modules/clients/database/models/vat_submissions.js";
@@ -8,50 +8,15 @@ import { customerTypes } from "@/modules/services/database/models/customer_types
 import { clientReferences } from "@/modules/services/database/models/references.js";
 import { users } from "@/modules/auth/database/models/user.js";
 
-/**
- * Calculates statutory deadline for a tax period (15th of following month)
- * e.g., for "2026-08" (August 2026), deadline is September 15, 2026 23:59:59.
- */
-function getSubmissionDeadline(taxPeriod: string): Date {
-  const [y, m] = taxPeriod.split("-").map(Number);
-  // In JS Date constructor: month is 0-indexed.
-  // Tax period month `m` (e.g. 8 for Aug) as index `m` automatically represents next month (Sept).
-  return new Date(y, m, 15, 23, 59, 59, 999);
-}
-
 // ── 1. LIST SUBMISSIONS FOR A TAX PERIOD ──────────────────────────────
 
 export const listSubmissions: Handler = async (c: any) => {
   try {
     const query = c.req.valid("query");
-    
-    // Default to last month if not specified (e.g. "2026-08")
-    let taxPeriod = query.month || query.taxPeriod;
-    if (!taxPeriod) {
-      const d = new Date();
-      d.setDate(1);
-      d.setMonth(d.getMonth() - 1);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      taxPeriod = `${year}-${month}`;
-    }
-
+    const taxPeriod = getDefaultTaxPeriod(query.month || query.taxPeriod);
     const deadline = getSubmissionDeadline(taxPeriod);
 
-    const auth = c.get("auth") || c.get("user");
-    let tenantAdminId: number | null = null;
-    let isSuperAdmin = false;
-
-    if (auth?.id) {
-      const currentUser = await db.query.users.findFirst({
-        where: eq(users.id, Number(auth.id)),
-        with: { role: true }
-      });
-      if (currentUser) {
-        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
-        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
-      }
-    }
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
 
     const clientConditions: any[] = [eq(clients.isActive, true)];
     if (!isSuperAdmin && tenantAdminId) {
@@ -300,7 +265,7 @@ export const recordSubmission: Handler = async (c: any) => {
         .limit(1)
     )[0];
 
-    let result;
+    let result: any = null;
     if (existing) {
       result = (
         await db

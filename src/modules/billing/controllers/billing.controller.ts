@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, like, sql } from "drizzle-orm";
 import type { Handler } from "hono";
-import { db, HttpStatusCodes } from "@/framework/facade.js";
+import { db, HttpStatusCodes, resolveTenantContext } from "@/framework/facade.js";
 import { bills } from "../database/models/bills.js";
 import { billItems } from "../database/models/bill_items.js";
 import { collections } from "../database/models/collections.js";
@@ -137,7 +137,72 @@ async function getClientRunningDue(clientId: number, excludeBillId?: number): Pr
   }
 
   const netDue = r2(totalBilledNet - totalCollected);
-  return netDue > 0 ? netDue : 0;
+  return netDue;
+}
+
+/**
+ * Super-fast Batch Running Balance Calculator: Eliminates N+1 loop queries
+ */
+async function getBatchClientsRunningDue(clientIds: number[]): Promise<Map<number, number>> {
+  const dueMap = new Map<number, number>();
+  if (clientIds.length === 0) return dueMap;
+
+  // 1. Fetch Opening Balances
+  const clientRows = await db
+    .select({ id: clients.id, openingBalance: clients.openingBalance })
+    .from(clients)
+    .where(inArray(clients.id, clientIds));
+
+  for (const c of clientRows) {
+    dueMap.set(c.id, c.openingBalance || 0);
+  }
+
+  // 2. Aggregate Active Bills (subtotal - discountAmount) per client
+  const billSums = await db
+    .select({
+      clientId: bills.clientId,
+      totalBilled: sql<number>`COALESCE(SUM(${bills.subtotal} - ${bills.discountAmount}), 0)::float`
+    })
+    .from(bills)
+    .where(
+      and(
+        inArray(bills.clientId, clientIds),
+        sql`${bills.status} != 'cancelled'`
+      )
+    )
+    .groupBy(bills.clientId);
+
+  for (const b of billSums) {
+    const current = dueMap.get(b.clientId) || 0;
+    dueMap.set(b.clientId, current + b.totalBilled);
+  }
+
+  // 3. Aggregate Completed Collections per client
+  const collectionSums = await db
+    .select({
+      clientId: collections.clientId,
+      totalCollected: sql<number>`COALESCE(SUM(${collections.amount}), 0)::float`
+    })
+    .from(collections)
+    .where(
+      and(
+        inArray(collections.clientId, clientIds),
+        eq(collections.status, "completed")
+      )
+    )
+    .groupBy(collections.clientId);
+
+  for (const c of collectionSums) {
+    const current = dueMap.get(c.clientId) || 0;
+    dueMap.set(c.clientId, r2(current - c.totalCollected));
+  }
+
+  // Ensure all clients have rounded 2 decimal values
+  for (const [id, val] of dueMap.entries()) {
+    dueMap.set(id, r2(val));
+  }
+
+  return dueMap;
 }
 
 // ── 3. LIST INVOICES / BILLS ─────────────────────────────────────────
@@ -146,8 +211,12 @@ export const listBills: Handler = async (c: any) => {
   try {
     const query = c.req.valid("query");
     const month = query.month || query.taxPeriod;
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
 
     let conditions: any[] = [];
+    if (!isSuperAdmin && tenantAdminId) {
+      conditions.push(eq(clients.createdBy, tenantAdminId));
+    }
     if (month && month !== "all") {
       conditions.push(eq(bills.taxPeriod, month));
     }
@@ -598,6 +667,9 @@ export const createBill: Handler = async (c: any) => {
     // 5. Generate sequential bill number: Inv-YYYY-000001
     const billNo = await generateNextBillNo(year);
 
+    const auth = c.get("auth") || c.get("user");
+    const creatorId = auth?.adminId ? Number(auth.adminId) : (auth?.id ? Number(auth.id) : null);
+
     // 6. Insert Bill in DB
     const newBill = (
       await db
@@ -616,6 +688,7 @@ export const createBill: Handler = async (c: any) => {
           paidAmount: 0,
           dueAmount,
           status: status === "draft" ? "draft" : "unpaid",
+          createdBy: creatorId,
           notes: notes?.trim() || null
         })
         .returning()
@@ -664,7 +737,26 @@ export const batchGenerateBills: Handler = async (c: any) => {
     const parsedBillDate = billDate ? new Date(billDate) : new Date();
     const year = parsedBillDate.getFullYear();
 
+    const auth = c.get("auth") || c.get("user");
+    const creatorId = auth?.adminId ? Number(auth.adminId) : (auth?.id ? Number(auth.id) : null);
+    let isSuperAdmin = false;
+
+    if (auth?.id) {
+      const currentUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(auth.id)),
+        with: { role: true }
+      });
+      if (currentUser) {
+        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin" || auth.role === "superadmin";
+      }
+    }
+
     // 1. Fetch all Active Clients
+    const clientConditions: any[] = [eq(clients.isActive, true)];
+    if (!isSuperAdmin && creatorId) {
+      clientConditions.push(eq(clients.createdBy, creatorId));
+    }
+
     let clientQuery = db
       .select({
         id: clients.id,
@@ -675,7 +767,7 @@ export const batchGenerateBills: Handler = async (c: any) => {
         isActive: clients.isActive
       })
       .from(clients)
-      .where(eq(clients.isActive, true));
+      .where(and(...clientConditions));
 
     const activeClients = await clientQuery;
     if (activeClients.length === 0) {
@@ -723,6 +815,11 @@ export const batchGenerateBills: Handler = async (c: any) => {
 
     const createdBillsList: any[] = [];
     let skippedCount = 0;
+
+    const eligibleClients = targetClients.filter(
+      (c) => !billedClientIds.has(c.id) && finalizedClientIds.has(c.id)
+    );
+    const batchDueMap = await getBatchClientsRunningDue(eligibleClients.map((c) => c.id));
 
     for (const client of targetClients) {
       // Skip if already billed
@@ -779,7 +876,7 @@ export const batchGenerateBills: Handler = async (c: any) => {
 
       // Calculate totals
       const subtotal = r2(itemsToInsert.reduce((acc, it) => acc + it.finalAmount, 0));
-      const previousDue = await getClientRunningDue(client.id);
+      const previousDue = batchDueMap.get(client.id) || 0;
       const grandTotal = r2(subtotal + previousDue);
 
       // Generate sequential billNo
@@ -803,6 +900,7 @@ export const batchGenerateBills: Handler = async (c: any) => {
             paidAmount: 0,
             dueAmount: grandTotal,
             status: "unpaid",
+            createdBy: creatorId,
             notes: `Batch generated monthly bill for ${taxPeriod}`
           })
           .returning()
@@ -855,8 +953,14 @@ export const getMissingBills: Handler = async (c: any) => {
   try {
     const query = c.req.valid("query");
     const month = query.month || query.taxPeriod || new Date().toISOString().slice(0, 7);
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
 
-    // Fetch all Active Clients
+    const clientConditions: any[] = [eq(clients.isActive, true)];
+    if (!isSuperAdmin && tenantAdminId) {
+      clientConditions.push(eq(clients.createdBy, tenantAdminId));
+    }
+
+    // Fetch all Active Clients for tenant
     const activeClients = await db
       .select({
         id: clients.id,
@@ -872,7 +976,7 @@ export const getMissingBills: Handler = async (c: any) => {
       .from(clients)
       .leftJoin(customerTypes, eq(clients.customerTypeId, customerTypes.id))
       .leftJoin(clientReferences, eq(clients.referenceId, clientReferences.id))
-      .where(eq(clients.isActive, true))
+      .where(and(...clientConditions))
       .orderBy(asc(clients.companyName));
 
     if (activeClients.length === 0) {
@@ -918,42 +1022,41 @@ export const getMissingBills: Handler = async (c: any) => {
     );
 
     const missingList: any[] = [];
+    const unbilledClients = activeClients.filter((cl) => !billedSet.has(cl.id));
+    const batchDueMap = await getBatchClientsRunningDue(unbilledClients.map((cl) => cl.id));
 
-    for (const cl of activeClients) {
-      // Only include unbilled clients
-      if (!billedSet.has(cl.id)) {
-        const sub = subMap.get(cl.id);
-        const prevDue = await getClientRunningDue(cl.id);
+    for (const cl of unbilledClients) {
+      const sub = subMap.get(cl.id);
+      const prevDue = batchDueMap.get(cl.id) || 0;
 
-        // Compute exact service fee
-        const clientRates = allRates.filter((r) => r.customerTypeId === cl.customerTypeId || !r.customerTypeId);
-        const returnRateObj = clientRates.find((r) => returnItem && r.serviceItemId === returnItem.id);
-        const booksRateObj = clientRates.find((r) => booksItem && r.serviceItemId === booksItem.id);
+      // Compute exact service fee
+      const clientRates = allRates.filter((r) => r.customerTypeId === cl.customerTypeId || !r.customerTypeId);
+      const returnRateObj = clientRates.find((r) => returnItem && r.serviceItemId === returnItem.id);
+      const booksRateObj = clientRates.find((r) => booksItem && r.serviceItemId === booksItem.id);
 
-        const returnRate = returnRateObj ? returnRateObj.regularRate : 2000;
-        const booksRate = booksRateObj ? booksRateObj.regularRate : 3000;
-        const booksMin = booksRateObj ? booksRateObj.minimumCharge : 2500;
+      const returnRate = returnRateObj ? returnRateObj.regularRate : 2000;
+      const booksRate = booksRateObj ? booksRateObj.regularRate : 3000;
+      const booksMin = booksRateObj ? booksRateObj.minimumCharge : 2500;
 
-        let monthlyServiceFee = returnRate;
-        if (cl.vatServiceType === "FULL") {
-          monthlyServiceFee += Math.max(booksRate, booksMin);
-        }
-
-        missingList.push({
-          id: cl.id,
-          companyName: cl.companyName,
-          binNumber: cl.binNumber,
-          mobile: cl.mobile,
-          customerTypeName: cl.customerTypeName,
-          referenceName: cl.referenceName,
-          vatServiceType: cl.vatServiceType,
-          targetMonth: month,
-          submissionId: sub ? sub.submissionId : null,
-          isSubmitted: !!sub,
-          previousDue: prevDue,
-          monthlyServiceFee: r2(monthlyServiceFee)
-        });
+      let monthlyServiceFee = returnRate;
+      if (cl.vatServiceType === "FULL") {
+        monthlyServiceFee += Math.max(booksRate, booksMin);
       }
+
+      missingList.push({
+        id: cl.id,
+        companyName: cl.companyName,
+        binNumber: cl.binNumber,
+        mobile: cl.mobile,
+        customerTypeName: cl.customerTypeName,
+        referenceName: cl.referenceName,
+        vatServiceType: cl.vatServiceType,
+        targetMonth: month,
+        submissionId: sub ? sub.submissionId : null,
+        isSubmitted: !!sub,
+        previousDue: prevDue,
+        monthlyServiceFee: r2(monthlyServiceFee)
+      });
     }
 
     return c.json(
@@ -1075,8 +1178,12 @@ export const deleteBill: Handler = async (c: any) => {
 export const listCollections: Handler = async (c: any) => {
   try {
     const query = c.req.valid("query");
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
     let conditions: any[] = [];
 
+    if (!isSuperAdmin && tenantAdminId) {
+      conditions.push(eq(clients.createdBy, tenantAdminId));
+    }
     if (query.clientId && query.clientId !== "all") {
       conditions.push(eq(collections.clientId, Number(query.clientId)));
     }
@@ -1147,6 +1254,7 @@ export const createCollection: Handler = async (c: any) => {
   try {
     const payload = c.req.valid("json");
     const { clientId, billId, collectionDate, amount, paymentMethod, referenceNo, notes } = payload;
+    const { userId } = await resolveTenantContext(c);
 
     const client = (
       await db.select().from(clients).where(eq(clients.id, clientId)).limit(1)
@@ -1174,6 +1282,7 @@ export const createCollection: Handler = async (c: any) => {
           paymentMethod,
           referenceNo: referenceNo?.trim() || null,
           notes: notes?.trim() || null,
+          receivedBy: userId,
           status: "completed"
         })
         .returning()

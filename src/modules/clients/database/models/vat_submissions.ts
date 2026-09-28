@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { integer, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { clients } from "./clients.js";
 import { users } from "@/modules/auth/database/models/user.js";
 
@@ -20,7 +20,10 @@ export const vatSubmissions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
   },
   (table) => [
-    uniqueIndex("vat_submissions_client_tax_period_idx").on(table.clientId, table.taxPeriod)
+    uniqueIndex("vat_submissions_client_tax_period_idx").on(table.clientId, table.taxPeriod),
+    index("vat_submissions_tax_period_idx").on(table.taxPeriod),
+    index("vat_submissions_submitted_by_idx").on(table.submittedBy),
+    index("vat_submissions_status_idx").on(table.status)
   ]
 );
 

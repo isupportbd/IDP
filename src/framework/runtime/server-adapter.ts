@@ -22,6 +22,7 @@ async function startNode(
   port: number,
   websocket?: RealtimeServeWebSocket
 ): Promise<HttpServerHandle> {
+  // @ts-ignore
   const [{ serve }, { createServer }] = await Promise.all([import("@hono/node-server"), import("node:http")]);
 
   const server = websocket?.node

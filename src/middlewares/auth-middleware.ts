@@ -16,7 +16,21 @@ export async function authMiddleware(c: Context, next: Next) {
   if (accessToken) {
     const accessPayload = await jwt.verifyToken(accessToken, "access");
 
-    if (accessPayload) {
+    if (accessPayload && accessPayload.id) {
+      // Fast path: verified cryptographically signed JWT payload contains user identity
+      if (accessPayload.role !== undefined) {
+        c.set("auth", {
+          ...accessPayload,
+          id: Number(accessPayload.id),
+          email: accessPayload.email,
+          adminId: accessPayload.adminId !== undefined ? (accessPayload.adminId ? Number(accessPayload.adminId) : null) : null,
+          roleId: accessPayload.roleId ? Number(accessPayload.roleId) : null,
+          role: accessPayload.role || null
+        });
+        return await next();
+      }
+
+      // Fallback for older tokens lacking role in payload
       const user = await db.query.users.findFirst({
         where: eq(users.id, accessPayload.id as number),
         with: { role: true }

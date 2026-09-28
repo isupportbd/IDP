@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useFirmApi, type CompanySettings, type BankAccount, type ExpenseHead } from "@/composables/useFirmApi";
 import { useServicesApi, type ServiceItem, type ServiceRate, type ClientReference } from "@/composables/useServicesApi";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const router = useRouter();
 const toast = useToast();
@@ -1237,15 +1238,11 @@ onMounted(async () => {
             </p>
           </div>
 
-          <div class="position-relative" style="width: 260px;">
-            <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted small"></i>
-            <input
-              v-model="itemSearch"
-              type="text"
-              class="form-control form-control-sm ps-5 idp-input"
-              placeholder="Search service items..."
-            />
-          </div>
+          <SearchInput
+            v-model="itemSearch"
+            placeholder="Search service items..."
+            max-width="260px"
+          />
         </div>
 
         <div class="table-responsive">
@@ -1314,15 +1311,11 @@ onMounted(async () => {
           </div>
 
           <div class="d-flex align-items-center gap-2">
-            <div class="position-relative" style="width: 240px;">
-              <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted small"></i>
-              <input
-                v-model="rateSearch"
-                type="text"
-                class="form-control form-control-sm ps-5 idp-input"
-                placeholder="Search rates..."
-              />
-            </div>
+            <SearchInput
+              v-model="rateSearch"
+              placeholder="Search rates..."
+              max-width="240px"
+            />
             <button
               type="button"
               class="btn btn-success btn-sm px-3 fw-semibold d-flex align-items-center gap-1"
@@ -1406,15 +1399,11 @@ onMounted(async () => {
           </div>
 
           <div class="d-flex align-items-center gap-2">
-            <div class="position-relative" style="width: 240px;">
-              <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted small"></i>
-              <input
-                v-model="expenseSearch"
-                type="text"
-                class="form-control form-control-sm ps-5 idp-input"
-                placeholder="Search expense heads..."
-              />
-            </div>
+            <SearchInput
+              v-model="expenseSearch"
+              placeholder="Search expense heads..."
+              max-width="240px"
+            />
             <button
               type="button"
               class="btn btn-warning btn-sm px-3 fw-semibold text-dark d-flex align-items-center gap-1"
@@ -1522,18 +1511,12 @@ onMounted(async () => {
         <!-- Filter & Search Toolbar -->
         <div class="p-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2 idp-card">
           <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1">
-            <div class="search-box position-relative" style="min-width: 260px; max-width: 360px;">
-              <i class="bi bi-search search-icon"></i>
-              <input
-                v-model="referenceSearch"
-                type="text"
-                class="form-control form-control-sm idp-search-input"
-                placeholder="Search reference name, phone, email..."
-              />
-              <button v-if="referenceSearch" class="clear-btn" @click="referenceSearch = ''">
-                <i class="bi bi-x"></i>
-              </button>
-            </div>
+            <SearchInput
+              v-model="referenceSearch"
+              placeholder="Search reference name, phone, email..."
+              min-width="260px"
+              max-width="360px"
+            />
           </div>
           <div class="text-muted small ps-2">
             Total: <strong class="text-white">{{ filteredReferences.length }}</strong> References

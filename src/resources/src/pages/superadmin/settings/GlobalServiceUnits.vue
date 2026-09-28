@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
 import { pulse } from "@/plugins/pulse";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -183,30 +184,20 @@ const handleDelete = async (u: ServiceUnitItem) => {
 
 <template>
   <div class="service-units-page">
-    <!-- Header Controls -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
       <div>
-        <h5 class="text-white fw-bold mb-1 d-flex align-items-center gap-2">
-          <i class="bi bi-tag-fill text-warning"></i> Global Service Units & Billing Basis
-        </h5>
-        <span class="text-muted small">
-          Manage system-wide service rate measurement units (e.g. Per MT, Per Month, Per Entry, Per Job, Flat Fee).
-        </span>
+        <h5 class="text-white fw-bold mb-1">Global Service Units & Billing Basis</h5>
+        <p class="text-muted small mb-0">Manage system-wide service rate measurement units (e.g. Per MT, Per Month, Per Entry, Per Job, Flat Fee).</p>
       </div>
-      <div class="d-flex align-items-center gap-2">
-        <div class="position-relative" style="width: 260px;">
-          <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted small"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm ps-5 bg-dark text-white border-secondary"
-            placeholder="Search service units..."
-          />
-        </div>
-        <button type="button" class="btn btn-warning btn-sm px-3 fw-semibold text-dark d-flex align-items-center gap-1" @click="openAddModal">
-          <i class="bi bi-plus-lg"></i> <span>Add Service Unit</span>
-        </button>
-      </div>
+      <button class="btn btn-primary btn-sm d-flex align-items-center gap-1 text-nowrap" @click="openAddModal">
+        <i class="bi bi-plus-lg"></i> Add Service Unit
+      </button>
+    </div>
+
+    <!-- Search Toolbar -->
+    <div v-if="units.length > 0 || searchQuery" class="d-flex gap-2 mb-3">
+      <SearchInput v-model="searchQuery" placeholder="Search service units..." max-width="320px" />
     </div>
 
     <!-- Units Table -->

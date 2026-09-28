@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import axios from "axios";
-import * as XLSX from "xlsx";
 import MonthMatrix from "@/components/MonthMatrix.vue";
 import { canAccessModule } from "@/composables/useAuth";
 
@@ -233,19 +232,19 @@ const handleCopyCredential = (text: string, field: "username" | "password") => {
   setTimeout(() => (copiedField.value = null), 2000);
 };
 
-// Filtered Clients for Autocomplete
+// Filtered Clients for Autocomplete (Only triggers when typing)
 const filteredClients = computed(() => {
-  if (!clientSearchText.value || selectedClientId.value) {
-    if (!clientSearchText.value) return clients.value;
-  }
-  const q = clientSearchText.value.toLowerCase();
-  return clients.value.filter((c) => c.name.toLowerCase().includes(q) || (c.bin && c.bin.toLowerCase().includes(q)));
+  if (!clientSearchText.value.trim() || selectedClientId.value) return [];
+  const q = clientSearchText.value.toLowerCase().trim();
+  return clients.value.filter(
+    (c) => (c.name || "").toLowerCase().includes(q) || (c.bin && c.bin.toLowerCase().includes(q))
+  );
 });
 
-// Filtered Items for Autocomplete
+// Filtered Items for Autocomplete (typing-only)
 const filteredItems = computed(() => {
-  if (!itemSearchText.value) return clientMonthItems.value;
-  const q = itemSearchText.value.toLowerCase();
+  if (!itemSearchText.value.trim() || selectedItemId.value) return [];
+  const q = itemSearchText.value.toLowerCase().trim();
   return clientMonthItems.value.filter((i) => i.name.toLowerCase().includes(q) || (i.hsCode && i.hsCode.toLowerCase().includes(q)));
 });
 
@@ -979,6 +978,22 @@ const selectItem = (item: Item) => {
   fetchReportsData();
 };
 
+const handleItemInput = () => {
+  selectedItemId.value = null;
+  if (itemSearchText.value.trim().length > 0) {
+    showItemDropdown.value = true;
+  } else {
+    showItemDropdown.value = false;
+    fetchReportsData();
+  }
+};
+
+const handleItemFocus = () => {
+  if (itemSearchText.value.trim().length > 0 && !selectedItemId.value) {
+    showItemDropdown.value = true;
+  }
+};
+
 const clearItem = () => {
   selectedItemId.value = null;
   itemSearchText.value = "";
@@ -1017,8 +1032,9 @@ const saveNewMonth = async () => {
 };
 
 // Export to Excel for Current Tab
-const exportActiveReport = () => {
+const exportActiveReport = async () => {
   if (!selectedClient.value) return;
+  const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
 
   if (currentTab.value === "purchases") {
@@ -1118,6 +1134,7 @@ const downloadMonthlySummaryExcel = async () => {
       "Total Purchased (Metric Tons)": Number(fmt(row.totalNetWt))
     }));
 
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(excelData);
     XLSX.utils.book_append_sheet(wb, ws, "Monthly Summary");
@@ -1204,8 +1221,9 @@ onMounted(async () => {
               type="text"
               class="form-control idp-input"
               style="padding-left: 36px !important; padding-right: 32px !important; height: 38px;"
-              placeholder="Search Client or BIN..."
-              @focus="showClientDropdown = true"
+              placeholder="Type to search Client or BIN..."
+              @input="selectedClientId = null; showClientDropdown = clientSearchText.trim().length > 0"
+              @focus="showClientDropdown = clientSearchText.trim().length > 0 && !selectedClientId"
               @blur="hideClientDropdown"
             />
             <button
@@ -1216,9 +1234,9 @@ onMounted(async () => {
               ✕
             </button>
 
-            <!-- Autocomplete Dropdown -->
+            <!-- Autocomplete Dropdown (Shows only when typing) -->
             <div
-              v-if="showClientDropdown"
+              v-if="showClientDropdown && filteredClients.length > 0"
               class="idp-card position-absolute top-100 start-0 w-100 mt-1 shadow-lg p-1"
               style="max-height: 220px; overflow-y: auto; z-index: 1050;"
             >
@@ -1298,9 +1316,10 @@ onMounted(async () => {
               type="text"
               class="form-control idp-input"
               style="padding-left: 36px !important; padding-right: 32px !important; height: 38px;"
-              placeholder="Search Item..."
+              placeholder="Type to search item..."
               :disabled="!selectedClientId || !selectedMonthYear"
-              @focus="showItemDropdown = true"
+              @focus="handleItemFocus"
+              @input="handleItemInput"
               @blur="hideItemDropdown"
             />
             <button
@@ -1311,7 +1330,7 @@ onMounted(async () => {
               ✕
             </button>
             <div
-              v-if="showItemDropdown && clientMonthItems.length > 0"
+              v-if="showItemDropdown && filteredItems.length > 0"
               class="idp-card position-absolute top-100 start-0 w-100 mt-1 shadow-lg p-1"
               style="max-height: 180px; overflow-y: auto; z-index: 1050;"
             >

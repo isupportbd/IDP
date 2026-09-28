@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import SearchInput from "@/components/common/SearchInput.vue";
 import type { AssignableUser } from "@/composables/useClientsApi";
 
 const props = withDefaults(
@@ -136,16 +137,12 @@ onUnmounted(() => {
     >
       <!-- Search Input Header -->
       <div class="p-2 border-bottom border-secondary border-opacity-50">
-        <div class="search-wrap position-relative">
-          <i class="bi bi-search search-icon"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm idp-search-box"
-            placeholder="Search managers..."
-            autoFocus
-          />
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search managers..."
+          size="sm"
+          :auto-focus="true"
+        />
       </div>
 
       <!-- Quick Actions Header -->

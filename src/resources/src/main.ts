@@ -34,36 +34,12 @@ const blockNumberWheel = (event: Event) => {
     (active && active.tagName === "INPUT" && (active as HTMLInputElement).type === "number")
   ) {
     e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
   }
 };
 
-// Capture phase listeners on document and window
+// Global non-passive wheel listener on window/document handles number inputs directly
 document.addEventListener("wheel", blockNumberWheel, { passive: false, capture: true });
-window.addEventListener("wheel", blockNumberWheel, { passive: false, capture: true });
 
-// Attach directly to inputs on focus, mouseover, or pointerenter
-const attachNoWheel = (event: Event) => {
-  const target = event.target as HTMLInputElement | null;
-  if (target && target.tagName === "INPUT" && target.type === "number") {
-    if (!target.dataset.noWheelAttached) {
-      target.dataset.noWheelAttached = "true";
-      target.addEventListener(
-        "wheel",
-        (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-        },
-        { passive: false }
-      );
-    }
-  }
-};
-
-document.addEventListener("focusin", attachNoWheel, { capture: true });
-document.addEventListener("mouseover", attachNoWheel, { capture: true });
-document.addEventListener("pointerdown", attachNoWheel, { capture: true });
 
 app.use(PulsePlugin);
 app.mount("#app");

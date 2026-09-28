@@ -12,6 +12,31 @@ import { vatSubmissions } from "@/modules/clients/database/models/vat_submission
 import { bills } from "@/modules/billing/database/models/bills.js";
 import { subscriptionTransactions } from "@/modules/superadmin/database/models/subscription_transactions.js";
 
+const storageCache = new Map<number, { records: number; expiresAt: number }>();
+
+async function getTenantStorageRecords(tenantAdminId: number): Promise<number> {
+  const cached = storageCache.get(tenantAdminId);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.records;
+  }
+
+  try {
+    const [pRes, cRes, sRes, bRes] = await Promise.all([
+      db.select({ count: sql<number>`count(*)` }).from(purchases).where(eq(purchases.adminId, tenantAdminId)),
+      db.select({ count: sql<number>`count(*)` }).from(clients).where(eq(clients.createdBy, tenantAdminId)),
+      db.select({ count: sql<number>`count(*)` }).from(vatSubmissions).where(eq(vatSubmissions.submittedBy, tenantAdminId)),
+      db.select({ count: sql<number>`count(*)` }).from(bills).where(eq(bills.createdBy, tenantAdminId))
+    ]);
+
+    const total = Number(pRes[0]?.count || 0) + Number(cRes[0]?.count || 0) + Number(sRes[0]?.count || 0) + Number(bRes[0]?.count || 0);
+    storageCache.set(tenantAdminId, { records: total, expiresAt: now + 30000 });
+    return total;
+  } catch {
+    return cached?.records ?? 0;
+  }
+}
+
 /**
  * Why: Removes sensitive/internal fields before returning user payload, computes wallet balance & auto-renews.
  * When: Used in auth responses like register/login/me.
@@ -114,14 +139,7 @@ export async function sanitizeUser(user: any) {
   // Calculate storage usage metrics
   const baseStorageMB = plan?.maxStorageMB || 1024;
   const totalStorageMB = baseStorageMB + extraStorageMB;
-  let totalRecords = 0;
-  try {
-    const [pCount] = await db.select({ count: sql<number>`count(*)` }).from(purchases).where(eq(purchases.adminId, tenantAdminId));
-    const [cCount] = await db.select({ count: sql<number>`count(*)` }).from(clients).where(eq(clients.createdBy, tenantAdminId));
-    const [sCount] = await db.select({ count: sql<number>`count(*)` }).from(vatSubmissions).where(eq(vatSubmissions.submittedBy, tenantAdminId));
-    const [bCount] = await db.select({ count: sql<number>`count(*)` }).from(bills).where(eq(bills.createdBy, tenantAdminId));
-    totalRecords = Number(pCount?.count || 0) + Number(cCount?.count || 0) + Number(sCount?.count || 0) + Number(bCount?.count || 0);
-  } catch {}
+  const totalRecords = await getTenantStorageRecords(tenantAdminId);
 
   const estimatedKB = Math.round(totalRecords * 3.2);
   const usedStorageMB = Number((estimatedKB / 1024).toFixed(2));
@@ -210,13 +228,18 @@ export async function revokeCurrentRefreshToken(c: any) {
 export async function issueTokens(c: any, user: any, options?: { remember?: boolean }) {
   const remember = !!options?.remember;
   const refreshExpiry = remember ? jwtConfig.refreshRememberExpirySeconds : jwtConfig.refreshExpirySeconds;
-  const role = user.role || null;
+  const roleName = user.role?.name || (typeof user.role === "string" ? user.role : null);
+  const roleId = user.roleId ?? user.role?.id ?? null;
+  const adminId = user.adminId ?? null;
+
   const accessToken = await jwt.generateToken(
     {
       id: user.id,
       email: user.email,
-      roleId: role?.id ?? null,
-      role: role?.name ?? null,
+      name: user.name,
+      adminId,
+      roleId,
+      role: roleName,
       remember
     },
     "access"
@@ -225,8 +248,9 @@ export async function issueTokens(c: any, user: any, options?: { remember?: bool
     {
       id: user.id,
       email: user.email,
-      roleId: role?.id ?? null,
-      role: role?.name ?? null,
+      adminId,
+      roleId,
+      role: roleName,
       remember
     },
     "refresh",

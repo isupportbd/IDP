@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import * as XLSX from "xlsx";
 import MonthNavigator from "@/components/MonthNavigator.vue";
+import SearchInput from "@/components/common/SearchInput.vue";
 import { useActivityFilterApi, type ActivityClient } from "@/composables/useActivityFilterApi";
 
 const router = useRouter();
@@ -202,7 +202,7 @@ const filterBySpecificReference = (refName: string) => {
 };
 
 // Export to Excel
-const exportToExcel = () => {
+const exportToExcel = async () => {
   const exportRows = filteredClients.value.map((c, idx) => ({
     "Sl No": idx + 1,
     "Company Name": c.name,
@@ -218,6 +218,7 @@ const exportToExcel = () => {
     "Submitted By": c.submission?.submittedBy || "—"
   }));
 
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(exportRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Activity Filter");
@@ -423,16 +424,12 @@ onMounted(() => {
       <!-- Left: Search Input, Client Type Dropdown, Reference Dropdown -->
       <div class="d-flex flex-wrap align-items-center gap-2 flex-grow-1" style="max-width: 800px;">
         <!-- Search Input -->
-        <div class="position-relative flex-grow-1" style="min-width: 220px;">
-          <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control form-control-sm idp-input"
-            style="padding: 0 14px 0 40px !important; height: 38px;"
-            placeholder="Search company, BIN, username, ref..."
-          />
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search company, BIN, username, ref..."
+          min-width="220px"
+          class="flex-grow-1"
+        />
 
         <!-- 1. Client Type Dropdown Filter -->
         <div style="min-width: 170px;">

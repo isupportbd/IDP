@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
-import { db, HttpStatusCodes } from "@/framework/facade.js";
+import { broadcast, db, HttpStatusCodes } from "@/framework/facade.js";
 import { clients } from "../database/models/clients.js";
 import { clientManagers } from "../database/models/client_managers.js";
 import { customerTypes } from "@/modules/services/database/models/customer_types.js";
@@ -1002,7 +1002,7 @@ export const bulkCreateClients: Handler = async (c: any) => {
     const allTypes = await db.select().from(customerTypes);
     const allRefs = await db.select().from(clientReferences);
 
-    const insertedList: any[] = [];
+    const toInsert: any[] = [];
     let skippedCount = 0;
 
     for (const item of rawClients) {
@@ -1068,7 +1068,7 @@ export const bulkCreateClients: Handler = async (c: any) => {
         }
       }
 
-      const clientData = {
+      toInsert.push({
         companyName,
         proprietorName: item.proprietorName?.trim() || null,
         mobile: item.mobile?.trim() || null,
@@ -1087,15 +1087,46 @@ export const bulkCreateClients: Handler = async (c: any) => {
         isActive: active,
         createdBy: tenantAdminId,
         notes: item.notes?.trim() || null
-      };
+      });
+    }
 
-      try {
-        const [newClient] = await db.insert(clients).values(clientData).returning();
-        if (newClient) {
-          insertedList.push(newClient);
+    const insertedList: any[] = [];
+    if (toInsert.length > 0) {
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < toInsert.length; i += CHUNK_SIZE) {
+        const chunk = toInsert.slice(i, i + CHUNK_SIZE);
+        try {
+          const insertedChunk = await db.insert(clients).values(chunk).returning();
+          insertedList.push(...insertedChunk);
+
+          if (toInsert.length > 200) {
+            const processedCount = Math.min(toInsert.length, i + chunk.length);
+            const percent = Math.round((processedCount / toInsert.length) * 100);
+            try {
+              broadcast(
+                "upload:clients:progress",
+                {
+                  adminId: tenantAdminId,
+                  processed: processedCount,
+                  total: toInsert.length,
+                  percent,
+                  timestamp: Date.now()
+                },
+                { all: true, auth: true }
+              );
+            } catch {}
+          }
+        } catch (e) {
+          // Fallback to row-by-row on chunk conflict
+          for (const singleItem of chunk) {
+            try {
+              const [newClient] = await db.insert(clients).values(singleItem).returning();
+              if (newClient) insertedList.push(newClient);
+            } catch {
+              skippedCount++;
+            }
+          }
         }
-      } catch (e) {
-        skippedCount++;
       }
     }
 

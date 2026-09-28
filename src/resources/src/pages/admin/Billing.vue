@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
-import * as XLSX from "xlsx";
 import MonthNavigator from "@/components/MonthNavigator.vue";
+import SearchInput from "@/components/common/SearchInput.vue";
+import StatusBadge from "@/components/common/StatusBadge.vue";
 import { useBillingApi, type Bill, type Collection } from "@/composables/useBillingApi";
 import { useServicesApi } from "@/composables/useServicesApi";
 import { useClientsApi } from "@/composables/useClientsApi";
@@ -96,6 +97,28 @@ const dueClientsList = computed(() => {
   return bills.value.filter((b) => b.dueAmount > 0);
 });
 
+// Pagination State (10 items per page)
+const currentPage = ref(1);
+const itemsPerPage = 10;
+
+const currentTabList = computed<any[]>(() => {
+  if (activeTab.value === 'dues') return dueClientsList.value;
+  if (activeTab.value === 'collections') return collections.value;
+  if (activeTab.value === 'missing') return missingBills.value;
+  return bills.value;
+});
+
+const totalPages = computed(() => Math.ceil(currentTabList.value.length / itemsPerPage) || 1);
+
+const paginatedList = computed<any[]>(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  return currentTabList.value.slice(start, start + itemsPerPage);
+});
+
+watch([activeTab, selectedMonth, selectedCustomerTypeId, selectedReferenceId, selectedStatusFilter, selectedPaymentMethod, searchQuery], () => {
+  currentPage.value = 1;
+});
+
 // Navigate to Create Invoice (Full Page)
 const goToCreateBill = (clientId?: number, month?: string) => {
   const query: any = {};
@@ -169,7 +192,7 @@ const handleCancelReceipt = async (col: Collection) => {
 };
 
 // Excel Export
-const exportToExcel = () => {
+const exportToExcel = async () => {
   let exportRows: any[] = [];
   if (activeTab.value === "invoices" || activeTab.value === "billed" || activeTab.value === "dues") {
     const source = activeTab.value === "dues" ? dueClientsList.value : bills.value;
@@ -213,6 +236,7 @@ const exportToExcel = () => {
     }));
   }
 
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(exportRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Billing Data");
@@ -411,18 +435,12 @@ const printReport = () => {
 
       <!-- Right: Search & Month Navigator (Equal 38px Heights) -->
       <div class="d-flex align-items-center gap-2 ms-auto flex-wrap">
-        <div class="search-box position-relative" style="width: 230px;">
-          <i class="bi bi-search search-icon"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="form-control idp-search-input"
-            placeholder="Search invoice, client, receipt..."
-          />
-          <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search invoice, client, receipt..."
+          max-width="260px"
+          min-width="180px"
+        />
 
         <div class="month-nav-container" style="width: 195px; flex-shrink: 0;">
           <MonthNavigator v-model="selectedMonth" />
@@ -460,7 +478,7 @@ const printReport = () => {
             </td>
           </tr>
 
-          <tr v-for="bill in (activeTab === 'dues' ? dueClientsList : bills)" :key="bill.id">
+          <tr v-for="bill in (paginatedList as Bill[])" :key="bill.id">
             <!-- Invoice No -->
             <td>
               <span class="font-monospace fw-bold text-info" style="font-size: 0.88rem;">{{ bill.billNo }}</span>
@@ -506,17 +524,7 @@ const printReport = () => {
 
             <!-- Status -->
             <td>
-              <span
-                class="badge text-uppercase"
-                :class="{
-                  'bg-success': bill.status === 'paid',
-                  'bg-warning text-dark': bill.status === 'partial',
-                  'bg-danger': bill.status === 'unpaid',
-                  'bg-secondary': bill.status === 'draft'
-                }"
-              >
-                {{ bill.status }}
-              </span>
+              <StatusBadge :status="bill.status" />
             </td>
 
             <!-- Actions (Icon Only) -->
@@ -577,7 +585,7 @@ const printReport = () => {
             </td>
           </tr>
 
-          <tr v-for="col in collections" :key="col.id">
+          <tr v-for="col in (paginatedList as Collection[])" :key="col.id">
             <!-- Receipt No -->
             <td>
               <span class="font-monospace fw-bold text-success" style="font-size: 0.88rem;">{{ col.receiptNo }}</span>
@@ -680,9 +688,9 @@ const printReport = () => {
             </td>
           </tr>
 
-          <tr v-for="(item, idx) in missingBills" :key="item.id">
+          <tr v-for="(item, idx) in (paginatedList as any[])" :key="item.id">
             <!-- Index -->
-            <td class="text-muted">{{ idx + 1 }}</td>
+            <td class="text-muted">{{ (currentPage - 1) * itemsPerPage + idx + 1 }}</td>
 
             <!-- Client Name & BIN -->
             <td>
@@ -738,6 +746,54 @@ const printReport = () => {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Pagination for Billing -->
+    <div v-if="currentTabList.length > 0" class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-2">
+      <span class="text-muted small">
+        Showing <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> to
+        <strong>{{ Math.min(currentPage * itemsPerPage, currentTabList.length) }}</strong> of
+        <strong>{{ currentTabList.length }}</strong> records
+      </span>
+
+      <div v-if="totalPages > 1" class="d-flex align-items-center gap-1">
+        <button
+          type="button"
+          class="btn btn-dark border-secondary btn-sm"
+          :disabled="currentPage <= 1"
+          @click="currentPage--"
+        >
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+
+        <template v-for="p in totalPages" :key="p">
+          <button
+            v-if="p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)"
+            type="button"
+            class="btn btn-sm"
+            :class="currentPage === p ? 'btn-primary' : 'btn-dark border-secondary text-muted'"
+            style="min-width: 32px;"
+            @click="currentPage = p"
+          >
+            {{ p }}
+          </button>
+          <span
+            v-else-if="p === currentPage - 3 || p === currentPage + 3"
+            class="text-muted px-1"
+          >
+            ...
+          </span>
+        </template>
+
+        <button
+          type="button"
+          class="btn btn-dark border-secondary btn-sm"
+          :disabled="currentPage >= totalPages"
+          @click="currentPage++"
+        >
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
     </div>
   </div>
 </template>

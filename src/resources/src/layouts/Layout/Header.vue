@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import axios from "axios";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 import { pulse } from "@/plugins/pulse";
 
@@ -237,14 +238,26 @@ const closeAllDropdowns = () => {
   showStatsDropdown.value = false;
 };
 
+const handleVisibilityChange = () => {
+  if (!document.hidden && authStore.user) {
+    fetchStats();
+    if (isSuperAdmin.value) {
+      fetchNotifications();
+    }
+  }
+};
+
 let statsTimer: any = null;
 onMounted(() => {
   fetchStats();
-  fetchNotifications();
+  if (isSuperAdmin.value) {
+    fetchNotifications();
+  }
   window.addEventListener("click", closeAllDropdowns);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 
   pulse.channel("auth").listen("tenant:signup", () => {
-    fetchNotifications();
+    if (isSuperAdmin.value) fetchNotifications();
     fetchStats();
   });
   pulse.channel("role:superadmin").listen("tenant:signup", () => {
@@ -278,13 +291,18 @@ onMounted(() => {
   });
 
   statsTimer = setInterval(() => {
-    fetchStats();
-    fetchNotifications();
-  }, 30000); // 30 seconds auto-refresh
+    if (!document.hidden && authStore.user) {
+      fetchStats();
+      if (isSuperAdmin.value) {
+        fetchNotifications();
+      }
+    }
+  }, 45000); // 45 seconds visibility-aware auto-refresh
 });
 
 onUnmounted(() => {
   window.removeEventListener("click", closeAllDropdowns);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
   if (statsTimer) clearInterval(statsTimer);
   pulse.channel("auth").stopListening("tenant:signup");
   pulse.channel("role:superadmin").stopListening("tenant:signup");
@@ -749,14 +767,11 @@ onUnmounted(() => {
                 </button>
               </div>
 
-              <div class="position-relative" style="width: 260px;">
-                <input
-                  v-model="activitySearch"
-                  type="text"
-                  class="form-control form-control-sm idp-input"
-                  placeholder="Search user or email..."
-                />
-              </div>
+              <SearchInput
+                v-model="activitySearch"
+                placeholder="Search user or email..."
+                max-width="260px"
+              />
             </div>
 
             <!-- Users Grid / List -->

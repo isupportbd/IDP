@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
-import { db, HttpStatusCodes } from "@/framework/facade.js";
+import { db, getDefaultTaxPeriod, HttpStatusCodes, resolveTenantContext } from "@/framework/facade.js";
 import { clients } from "@/modules/clients/database/models/clients.js";
 import { purchases } from "@/modules/clients/database/models/purchases.js";
 import { vatSubmissions } from "@/modules/clients/database/models/vat_submissions.js";
@@ -14,32 +14,10 @@ import { users } from "@/modules/auth/database/models/user.js";
 export const getActivityMatrix: Handler = async (c: any) => {
   try {
     const query = c.req.valid("query");
-
-    // Determine target month (tax period) - default to previous month
-    let taxPeriod = query.month || query.taxPeriod;
-    if (!taxPeriod) {
-      const d = new Date();
-      d.setDate(1);
-      d.setMonth(d.getMonth() - 1);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      taxPeriod = `${year}-${month}`;
-    }
+    const taxPeriod = getDefaultTaxPeriod(query.month || query.taxPeriod);
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
 
     const auth = c.get("auth") || c.get("user");
-    let tenantAdminId = 1;
-    let isSuperAdmin = false;
-
-    if (auth?.id) {
-      const currentUser = await db.query.users.findFirst({
-        where: eq(users.id, Number(auth.id)),
-        with: { role: true }
-      });
-      if (currentUser) {
-        isSuperAdmin = currentUser.role?.name?.toLowerCase() === "superadmin";
-        tenantAdminId = currentUser.adminId ? Number(currentUser.adminId) : currentUser.id;
-      }
-    }
 
     // 1. Fetch all active clients
     const activeClients = await db
@@ -65,7 +43,14 @@ export const getActivityMatrix: Handler = async (c: any) => {
       .from(clients)
       .leftJoin(customerTypes, eq(clients.customerTypeId, customerTypes.id))
       .leftJoin(clientReferences, eq(clients.referenceId, clientReferences.id))
-      .where(eq(clients.isActive, true))
+      .where(
+        isSuperAdmin || !auth?.id
+          ? eq(clients.isActive, true)
+          : and(
+              eq(clients.isActive, true),
+              or(eq(clients.createdBy, tenantAdminId), sql`${clients.createdBy} IS NULL`)
+            )
+      )
       .orderBy(asc(clients.companyName));
 
     const activeClientIds = activeClients.map((cl) => cl.id);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import axios from "axios";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 interface TenantStorageItem {
   id: number;
@@ -171,18 +172,12 @@ onMounted(fetchStorageStats);
         </div>
 
         <!-- Search Box -->
-        <div class="search-box position-relative" style="width: 260px;">
-          <i class="bi bi-search search-icon"></i>
-          <input
-            v-model="searchTerm"
-            type="text"
-            class="form-control form-control-sm idp-search-input"
-            placeholder="Search tenant or email..."
-          />
-          <button v-if="searchTerm" class="clear-btn" @click="searchTerm = ''">
-            <i class="bi bi-x"></i>
-          </button>
-        </div>
+        <SearchInput
+          v-model="searchTerm"
+          placeholder="Search tenant or email..."
+          max-width="260px"
+          min-width="180px"
+        />
       </div>
 
       <div class="table-responsive">

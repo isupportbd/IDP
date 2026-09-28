@@ -91,3 +91,65 @@ const route = useRoute();
     <router-view />
   </div>
 </template>
+
+<style scoped>
+:deep(.search-box) {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+:deep(.search-icon) {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  pointer-events: none;
+  font-size: 0.82rem;
+  z-index: 2;
+}
+
+:deep(.idp-search-input) {
+  background-color: #15181c !important;
+  border: 1px solid #3a4149 !important;
+  color: #f8f9fa !important;
+  padding-left: 36px !important;
+  padding-right: 32px !important;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  height: 36px;
+  width: 100%;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+:deep(.idp-search-input:focus) {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.25) !important;
+}
+
+:deep(.idp-search-input::placeholder) {
+  color: #6c757d !important;
+}
+
+:deep(.clear-btn) {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 0.95rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.clear-btn:hover) {
+  color: #f8f9fa;
+}
+</style>

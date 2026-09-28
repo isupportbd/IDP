@@ -380,7 +380,7 @@ async function readStream(disk: Disk, file: string) {
 
     if ("transformToWebStream" in body && typeof body.transformToWebStream === "function") {
       const webStream = body.transformToWebStream();
-      return Readable.fromWeb(webStream as Parameters<typeof Readable.fromWeb>[0]);
+      return Readable.fromWeb(webStream as any);
     }
 
     if ("transformToByteArray" in body && typeof body.transformToByteArray === "function") {

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import { type Tenant, type SubscriptionTransaction } from "@/composables/useSuperAdminApi";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -304,18 +305,13 @@ onMounted(fetchLedgerData);
           </div>
 
           <!-- Search Box -->
-          <div class="search-box position-relative no-print" style="width: 260px;">
-            <i class="bi bi-search search-icon"></i>
-            <input
-              v-model="searchTerm"
-              type="text"
-              class="form-control form-control-sm idp-search-input"
-              placeholder="Search TrxID, plan, cycle..."
-            />
-            <button v-if="searchTerm" class="clear-btn" @click="searchTerm = ''">
-              <i class="bi bi-x"></i>
-            </button>
-          </div>
+          <SearchInput
+            v-model="searchTerm"
+            placeholder="Search TrxID, plan, cycle..."
+            max-width="260px"
+            min-width="180px"
+            class="no-print"
+          />
         </div>
 
         <div class="table-responsive">

@@ -422,7 +422,7 @@ export const resetPassword: Handler = async (c: any) => {
     const user = await db.query.users.findFirst({
       where: eq(users.email, body.email)
     });
-    if (user) await db.update(refreshTokens).set({ revoked: 1 }).where(eq(refreshTokens.userId, user.id));
+    if (user) await db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.userId, user.id));
 
     return c.json({ message: "Password reset successfully" }, HttpStatusCodes.OK);
   } catch (error) {
@@ -482,7 +482,7 @@ export const refreshToken: Handler = async (c: any) => {
       where: eq(refreshTokens.jti, payload.jti as string)
     });
 
-    if (!storedToken || storedToken.revoked === 1) {
+    if (!storedToken || storedToken.revoked) {
       return c.json({ message: "Refresh token revoked" }, HttpStatusCodes.UNAUTHORIZED);
     }
 
@@ -526,7 +526,7 @@ export const refreshToken: Handler = async (c: any) => {
       .set({
         jti: newRefreshToken.jti as string,
         expiresAt: new Date(newRefreshToken.exp * 1000),
-        revoked: 0
+        revoked: false
       })
       .where(eq(refreshTokens.id, storedToken.id));
 

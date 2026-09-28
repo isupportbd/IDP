@@ -4,6 +4,7 @@ import { onBeforeRouteLeave } from "vue-router";
 import axios from "axios";
 import { pulse } from "@/plugins/pulse";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -233,15 +234,7 @@ const handleDelete = async (u: MeasurementUnit) => {
 
     <!-- Search Toolbar -->
     <div v-if="units.length > 0 || searchQuery" class="d-flex gap-2 mb-3">
-      <div class="position-relative flex-grow-1" style="max-width: 320px;">
-        <i class="bi bi-search position-absolute top-50 translate-middle-y ms-3 text-muted"></i>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="form-control form-control-sm ps-5 idp-input"
-          placeholder="Search unit code, title..."
-        />
-      </div>
+      <SearchInput v-model="searchQuery" placeholder="Search unit code, title..." max-width="320px" />
     </div>
 
     <!-- Table Card -->

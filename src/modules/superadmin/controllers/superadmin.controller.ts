@@ -1,4 +1,4 @@
-import { broadcast, db } from "@/framework/facade.js";
+import { broadcast, cache, db } from "@/framework/facade.js";
 import { users } from "@/modules/auth/database/models/user.js";
 import { roles } from "@/modules/auth/database/models/role.js";
 import { plans } from "@/modules/superadmin/database/models/plans.js";
@@ -22,6 +22,8 @@ import type { Context } from "hono";
 
 export function notifySettingsUpdated(settingType: string) {
   try {
+    cache.forget(`master:${settingType}`);
+    cache.forgetByPrefix(`master:${settingType}:`);
     broadcast("global:settings-updated", { type: settingType, timestamp: Date.now() }, { all: true, auth: true });
   } catch (err) {
     console.error(`Failed to broadcast ${settingType} update:`, err);
@@ -36,6 +38,11 @@ export async function getTenants(c: Context) {
       where: eq(roles.name, "superadmin")
     });
     const superadminRoleId = superadminRole?.id ?? -1;
+
+    const adminRole = await db.query.roles.findFirst({
+      where: eq(roles.name, "admin")
+    });
+    const adminRoleId = adminRole?.id ?? -1;
 
     const allUsers = await db
       .select({
@@ -58,18 +65,22 @@ export async function getTenants(c: Context) {
       .where(
         and(
           ne(users.status, "pending"),
-          or(ne(users.roleId, superadminRoleId), isNull(users.roleId))
+          or(
+            eq(users.roleId, adminRoleId),
+            eq(users.adminId, users.id),
+            and(isNull(users.adminId), ne(users.roleId, superadminRoleId))
+          )
         )
       )
       .orderBy(desc(users.createdAt));
-
 
     // Attach client counts and plan details
     const tenantList = await Promise.all(
       allUsers.map(async (t) => {
         const [clientCountResult] = await db
           .select({ count: sql<number>`count(*)` })
-          .from(clients);
+          .from(clients)
+          .where(eq(clients.createdBy, t.id));
 
         let plan = null;
         if (t.planId) {
@@ -663,6 +674,11 @@ export async function getStorageStats(c: Context) {
     });
     const superadminRoleId = superadminRole?.id ?? -1;
 
+    const adminRole = await db.query.roles.findFirst({
+      where: eq(roles.name, "admin")
+    });
+    const adminRoleId = adminRole?.id ?? -1;
+
     // Fetch all plans to map storage quotas
     const allPlansList = await db.select().from(plans);
     const plansMap = new Map<number, any>(allPlansList.map((p) => [p.id, p]));
@@ -679,7 +695,16 @@ export async function getStorageStats(c: Context) {
         createdAt: users.createdAt
       })
       .from(users)
-      .where(and(ne(users.status, "pending"), ne(users.roleId, superadminRoleId)))
+      .where(
+        and(
+          ne(users.status, "pending"),
+          or(
+            eq(users.roleId, adminRoleId),
+            eq(users.adminId, users.id),
+            and(isNull(users.adminId), ne(users.roleId, superadminRoleId))
+          )
+        )
+      )
       .orderBy(desc(users.createdAt));
 
     const tenantStatsRaw = await Promise.all(
@@ -737,9 +762,10 @@ export async function getStorageStats(c: Context) {
           extraStorageMB,
           maxStorageMB,
           createdAt: t.createdAt,
-          clientsCount: effectiveClients,
-          submissionsCount: effectiveSubmissions,
-          billsCount: effectiveBills,
+          clientsCount: cCount,
+          submissionsCount: sCount,
+          billsCount: bCount,
+          purchasesCount: pCount,
           totalRecords
         };
       })
@@ -1270,7 +1296,9 @@ export async function saveColumnMappings(c: Context) {
 // 12. Global Commodity & HS Codes (Operating on global_items table)
 export async function getGlobalItems(c: Context) {
   try {
-    const list = await db.select().from(globalItems).orderBy(asc(globalItems.hsCode));
+    const list = await cache.remember("master:global-items", 3600, async () => {
+      return await db.select().from(globalItems).orderBy(asc(globalItems.hsCode));
+    });
     return c.json({ success: true, data: list });
   } catch (error: any) {
     console.error("Error fetching global items:", error);
@@ -1418,7 +1446,9 @@ export async function deleteGlobalItem(c: Context) {
 // 13. Measurement Units (Operating on measurement_units table)
 export async function getMeasurementUnits(c: Context) {
   try {
-    const list = await db.select().from(measurementUnits).orderBy(asc(measurementUnits.id));
+    const list = await cache.remember("master:measurement-units", 3600, async () => {
+      return await db.select().from(measurementUnits).orderBy(asc(measurementUnits.id));
+    });
     return c.json({ success: true, data: list });
   } catch (error: any) {
     console.error("Error fetching measurement units:", error);
@@ -1560,7 +1590,9 @@ export async function deleteMeasurementUnit(c: Context) {
 // 14. VAT Note Rules / Mappings (Operating on vat_notes_mapping table)
 export async function getVatNotes(c: Context) {
   try {
-    const list = await db.select().from(vatNotes).orderBy(asc(vatNotes.vatRate));
+    const list = await cache.remember("master:vat-notes", 3600, async () => {
+      return await db.select().from(vatNotes).orderBy(asc(vatNotes.vatRate));
+    });
     return c.json({ success: true, data: list });
   } catch (error: any) {
     console.error("Error fetching VAT notes:", error);
@@ -1710,33 +1742,37 @@ export async function deleteVatNote(c: Context) {
 // 15. Unit Conversions (Operating on PostgreSQL unit_conversions table)
 export async function getUnitConversions(c: Context) {
   try {
-    const list = await db.select().from(unitConversions).orderBy(asc(unitConversions.id));
     const allParam = c.req.query("all");
-    if (allParam === "true") {
-      return c.json({ success: true, data: list });
-    }
-
-    // Deduplicate pairs for Settings View (showing canonical pairs with direct & reverse)
-    const seen = new Set<string>();
-    const uniquePairs: any[] = [];
-    for (const item of list) {
-      const key = [item.purchaseUnit, item.salesUnit].sort().join("<->");
-      if (!seen.has(key)) {
-        seen.add(key);
-        const f = Number(item.factor || 1);
-        const revFactor = f > 0 ? Math.round((1 / f) * 100000000) / 100000000 : 0;
-        uniquePairs.push({
-          id: item.id,
-          purchaseUnit: item.purchaseUnit,
-          salesUnit: item.salesUnit,
-          factor: f,
-          reverseFactor: revFactor,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt
-        });
+    const cacheKey = allParam === "true" ? "master:unit-conversions:all" : "master:unit-conversions:dedup";
+    const data = await cache.remember(cacheKey, 3600, async () => {
+      const list = await db.select().from(unitConversions).orderBy(asc(unitConversions.id));
+      if (allParam === "true") {
+        return list;
       }
-    }
-    return c.json({ success: true, data: uniquePairs });
+
+      // Deduplicate pairs for Settings View (showing canonical pairs with direct & reverse)
+      const seen = new Set<string>();
+      const uniquePairs: any[] = [];
+      for (const item of list) {
+        const key = [item.purchaseUnit, item.salesUnit].sort().join("<->");
+        if (!seen.has(key)) {
+          seen.add(key);
+          const f = Number(item.factor || 1);
+          const revFactor = f > 0 ? Math.round((1 / f) * 100000000) / 100000000 : 0;
+          uniquePairs.push({
+            id: item.id,
+            purchaseUnit: item.purchaseUnit,
+            salesUnit: item.salesUnit,
+            factor: f,
+            reverseFactor: revFactor,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt
+          });
+        }
+      }
+      return uniquePairs;
+    });
+    return c.json({ success: true, data });
   } catch (error: any) {
     console.error("Error fetching unit conversions:", error);
     return c.json({ success: false, error: "Failed to fetch unit conversions" }, 500);
@@ -1977,11 +2013,25 @@ export async function getPlatformPublicStats(c: Context) {
     });
     const superadminRoleId = superadminRole?.id ?? -1;
 
+    const adminRole = await db.query.roles.findFirst({
+      where: eq(roles.name, "admin")
+    });
+    const adminRoleId = adminRole?.id ?? -1;
+
     // Count tenants (firm admins)
     const [tenantCount] = await db
       .select({ count: sql<number>`count(*)` })
       .from(users)
-      .where(and(ne(users.roleId, superadminRoleId), eq(users.status, "active")));
+      .where(
+        and(
+          eq(users.status, "active"),
+          or(
+            eq(users.roleId, adminRoleId),
+            eq(users.adminId, users.id),
+            and(isNull(users.adminId), ne(users.roleId, superadminRoleId))
+          )
+        )
+      );
 
     // Count all users
     const [allUsersCount] = await db

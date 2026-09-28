@@ -44,6 +44,8 @@ export const purchases = pgTable(
     itemIdIdx: index("purchases_item_id_idx").on(table.itemId),
     monthIdx: index("purchases_month_idx").on(table.month),
     adminMonthIdx: index("purchases_admin_month_idx").on(table.adminId, table.month),
-    clientMonthIdx: index("purchases_client_month_idx").on(table.clientId, table.month)
+    clientMonthIdx: index("purchases_client_month_idx").on(table.clientId, table.month),
+    beNoDateIdx: index("purchases_be_no_date_idx").on(table.beNo, table.beDate),
+    clientBeDateIdx: index("purchases_client_be_date_idx").on(table.clientId, table.beDate)
   })
 );

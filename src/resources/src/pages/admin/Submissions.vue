@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import * as XLSX from "xlsx";
 import MonthNavigator from "@/components/MonthNavigator.vue";
+import StatusBadge from "@/components/common/StatusBadge.vue";
 import { useSubmissionsApi, type SubmissionItem } from "@/composables/useSubmissionsApi";
 import { useServicesApi } from "@/composables/useServicesApi";
 import { useClientsApi } from "@/composables/useClientsApi";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -66,23 +67,33 @@ const selectedClientItem = computed(() => {
   return submissions.value.find((s) => s.id === form.value.clientId) || null;
 });
 
+let searchTimeout: any = null;
+
+const loadSubmissionsList = async () => {
+  try {
+    await fetchSubmissions({
+      month: selectedMonth.value,
+      customerTypeId: selectedCustomerTypeId.value,
+      referenceId: selectedReferenceId.value,
+      managerId: selectedManagerId.value,
+      status: statusFilter.value,
+      search: searchQuery.value.trim()
+    });
+  } catch (err: any) {
+    toast.error("Failed to load submissions");
+  }
+};
+
 const loadData = async () => {
   try {
     await Promise.all([
-      fetchSubmissions({
-        month: selectedMonth.value,
-        customerTypeId: selectedCustomerTypeId.value,
-        referenceId: selectedReferenceId.value,
-        managerId: selectedManagerId.value,
-        status: statusFilter.value,
-        search: searchQuery.value
-      }),
+      loadSubmissionsList(),
       fetchCustomerTypes(),
       fetchReferences(),
       fetchAssignableUsers()
     ]);
   } catch (err: any) {
-    toast.error("Failed to load submissions");
+    toast.error("Failed to load initial submissions data");
   }
 };
 
@@ -90,9 +101,21 @@ onMounted(() => {
   loadData();
 });
 
-watch([selectedMonth, selectedCustomerTypeId, selectedReferenceId, selectedManagerId, statusFilter, searchQuery], () => {
+// Pagination State (10 items per page)
+const currentPage = ref(1);
+const itemsPerPage = 10;
+
+const totalPages = computed(() => Math.ceil(submissions.value.length / itemsPerPage) || 1);
+
+const paginatedSubmissions = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  return submissions.value.slice(start, start + itemsPerPage);
+});
+
+watch([selectedMonth, selectedCustomerTypeId, selectedReferenceId, selectedManagerId, statusFilter], () => {
   selectedIds.value = [];
-  loadData();
+  currentPage.value = 1;
+  loadSubmissionsList();
 });
 
 // Selection Handlers
@@ -206,7 +229,7 @@ const handleBatchClear = async () => {
 };
 
 // 1. Export to Excel
-const exportToExcel = () => {
+const exportToExcel = async () => {
   const exportData = submissions.value.map((s, idx) => ({
     "Sl No.": idx + 1,
     "Client / Company Name": s.companyName,
@@ -220,6 +243,7 @@ const exportToExcel = () => {
     "Remarks": s.remarks || ""
   }));
 
+  const XLSX = await import("xlsx");
   const worksheet = XLSX.utils.json_to_sheet(exportData);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Submissions");
@@ -361,18 +385,12 @@ const printReport = () => {
     <!-- Filter & Search Toolbar -->
     <div class="filter-panel px-3 py-2 mb-3 d-print-none d-flex align-items-center gap-2">
       <!-- 1. Search Box -->
-      <div class="search-box position-relative flex-grow-1" style="min-width: 180px;">
-        <i class="bi bi-search search-icon"></i>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="form-control idp-search-input"
-          placeholder="Search company, BIN, ID..."
-        />
-        <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">
-          <i class="bi bi-x"></i>
-        </button>
-      </div>
+      <SearchInput
+        v-model="searchQuery"
+        placeholder="Search company, BIN, ID..."
+        max-width="320px"
+        min-width="200px"
+      />
 
       <!-- 2. Customer Type Filter -->
       <select v-model="selectedCustomerTypeId" class="form-select idp-select" style="width: auto;">
@@ -449,7 +467,7 @@ const printReport = () => {
             </td>
           </tr>
 
-          <tr v-for="item in submissions" :key="item.id">
+          <tr v-for="item in paginatedSubmissions" :key="item.id">
             <!-- Checkbox -->
             <td class="d-print-none text-center">
               <input
@@ -499,19 +517,7 @@ const printReport = () => {
 
             <!-- Status Badge -->
             <td>
-              <span
-                class="badge-status"
-                :class="{
-                  'badge-status-submitted': item.status === 'submitted',
-                  'badge-status-pending': item.status === 'pending',
-                  'badge-status-late': item.status === 'late_submitted'
-                }"
-              >
-                <span class="status-dot"></span>
-                <span v-if="item.status === 'submitted'">Submitted</span>
-                <span v-else-if="item.status === 'late_submitted'">Late Submitted</span>
-                <span v-else>Pending</span>
-              </span>
+              <StatusBadge :status="item.status" />
             </td>
 
             <!-- Actions (Icon Only) -->
@@ -541,6 +547,54 @@ const printReport = () => {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Pagination for Submissions -->
+    <div v-if="submissions.length > 0" class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-2">
+      <span class="text-muted small">
+        Showing <strong>{{ (currentPage - 1) * itemsPerPage + 1 }}</strong> to
+        <strong>{{ Math.min(currentPage * itemsPerPage, submissions.length) }}</strong> of
+        <strong>{{ submissions.length }}</strong> submissions
+      </span>
+
+      <div v-if="totalPages > 1" class="d-flex align-items-center gap-1">
+        <button
+          type="button"
+          class="btn btn-dark border-secondary btn-sm"
+          :disabled="currentPage <= 1"
+          @click="currentPage--"
+        >
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+
+        <template v-for="p in totalPages" :key="p">
+          <button
+            v-if="p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)"
+            type="button"
+            class="btn btn-sm"
+            :class="currentPage === p ? 'btn-primary' : 'btn-dark border-secondary text-muted'"
+            style="min-width: 32px;"
+            @click="currentPage = p"
+          >
+            {{ p }}
+          </button>
+          <span
+            v-else-if="p === currentPage - 3 || p === currentPage + 3"
+            class="text-muted px-1"
+          >
+            ...
+          </span>
+        </template>
+
+        <button
+          type="button"
+          class="btn btn-dark border-secondary btn-sm"
+          :disabled="currentPage >= totalPages"
+          @click="currentPage++"
+        >
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
     </div>
 
     <!-- Record Submission ID Modal (Minimal Design) -->

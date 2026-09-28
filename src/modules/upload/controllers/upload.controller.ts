@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import * as XLSX from "xlsx";
-import { db, HttpStatusCodes } from "@/framework/facade.js";
+import { broadcast, db, HttpStatusCodes } from "@/framework/facade.js";
 import { columnMappings } from "@/modules/superadmin/database/models/column_mappings.js";
 import { globalItems } from "@/modules/superadmin/database/models/global_items.js";
 import { clients } from "@/modules/clients/database/models/clients.js";
@@ -730,7 +730,29 @@ export const savePurchases: Handler = async (c: any) => {
     }
 
     if (toInsert.length > 0) {
-      await db.insert(purchases).values(toInsert);
+      const CHUNK_SIZE = 500;
+      for (let i = 0; i < toInsert.length; i += CHUNK_SIZE) {
+        const chunk = toInsert.slice(i, i + CHUNK_SIZE);
+        await db.insert(purchases).values(chunk);
+
+        if (toInsert.length > 500) {
+          const processedCount = Math.min(toInsert.length, i + chunk.length);
+          const percent = Math.round((processedCount / toInsert.length) * 100);
+          try {
+            broadcast(
+              "upload:purchases:progress",
+              {
+                adminId: tenantAdminId,
+                processed: processedCount,
+                total: toInsert.length,
+                percent,
+                timestamp: Date.now()
+              },
+              { all: true, auth: true }
+            );
+          } catch {}
+        }
+      }
     }
 
     return c.json({

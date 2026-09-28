@@ -124,11 +124,7 @@ const showStorageAlert = computed(() => {
     <!-- Main Content Body (Continuous Left/Right Vertical Lines) -->
     <main class="flex-grow-1 w-100 d-flex flex-column">
       <div class="idp-grid-container flex-grow-1 px-0 py-3 py-md-4">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
+        <router-view />
       </div>
     </main>
 
@@ -241,16 +237,6 @@ const showStorageAlert = computed(() => {
 </template>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.15s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
 .footer-link:hover {
   text-decoration: underline !important;
 }

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useBillingApi, type Bill } from "@/composables/useBillingApi";
 import { useClientsApi } from "@/composables/useClientsApi";
 import { useToast } from "@/composables/useToast";
+import ClientSearchSelect from "@/components/common/ClientSearchSelect.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -12,17 +13,7 @@ const toast = useToast();
 const { createCollection, fetchBills, fetchClientBillingOverview } = useBillingApi();
 const { clients, fetchClients } = useClientsApi();
 
-const searchContainerRef = ref<HTMLElement | null>(null);
 const selectedClientId = ref<number | null>(null);
-const clientSearchText = ref("");
-const isSearchDropdownOpen = ref(false);
-
-const handleClickOutside = (event: MouseEvent) => {
-  if (searchContainerRef.value && !searchContainerRef.value.contains(event.target as Node)) {
-    isSearchDropdownOpen.value = false;
-  }
-};
-
 const selectedBillId = ref<number | null>(null);
 const clientBills = ref<Bill[]>([]);
 const clientOverview = ref<any>(null);
@@ -33,18 +24,6 @@ const paymentMethod = ref<"cash" | "bank" | "cheque" | "bkash" | "nagad" | "rock
 const referenceNo = ref("");
 const notes = ref("");
 const isSaving = ref(false);
-
-const filteredClients = computed(() => {
-  if (!clientSearchText.value.trim()) return clients.value.filter((c) => c.isActive);
-  const q = clientSearchText.value.toLowerCase().trim();
-  return clients.value.filter(
-    (c) =>
-      c.isActive &&
-      (c.companyName.toLowerCase().includes(q) ||
-        (c.binNumber && c.binNumber.toLowerCase().includes(q)) ||
-        (c.mobile && c.mobile.toLowerCase().includes(q)))
-  );
-});
 
 const loadClientDetails = async () => {
   if (!selectedClientId.value) {
@@ -72,13 +51,10 @@ const loadClientDetails = async () => {
 };
 
 onMounted(async () => {
-  document.addEventListener("click", handleClickOutside);
   await fetchClients();
 
   if (route.query.clientId) {
     selectedClientId.value = Number(route.query.clientId);
-    const matched = clients.value.find((c) => c.id === selectedClientId.value);
-    if (matched) clientSearchText.value = matched.companyName;
   }
   if (route.query.billId) {
     selectedBillId.value = Number(route.query.billId);
@@ -89,19 +65,9 @@ onMounted(async () => {
   }
 });
 
-onUnmounted(() => {
-  document.removeEventListener("click", handleClickOutside);
-});
-
 watch(selectedClientId, () => {
   loadClientDetails();
 });
-
-const selectClient = (c: any) => {
-  selectedClientId.value = c.id;
-  clientSearchText.value = c.companyName;
-  isSearchDropdownOpen.value = false;
-};
 
 const currentDue = computed(() => {
   return clientOverview.value?.previousDue || 0;
@@ -191,46 +157,15 @@ const handleSaveCollection = async () => {
             <span>Client Information</span>
           </h6>
 
-          <div ref="searchContainerRef" class="position-relative mb-3">
+          <div class="mb-3">
             <label class="form-label text-secondary small fw-semibold">
               Select Client Organization <span class="text-danger">*</span>
             </label>
-            <div class="search-input-group position-relative">
-              <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
-              <input
-                v-model="clientSearchText"
-                type="text"
-                class="form-control idp-input ps-5"
-                placeholder="Search by company name, BIN, or mobile..."
-                @focus="isSearchDropdownOpen = true"
-              />
-              <button
-                v-if="clientSearchText"
-                type="button"
-                class="btn-clear position-absolute top-50 end-0 translate-middle-y me-2"
-                @click="clientSearchText = ''; selectedClientId = null;"
-              >
-                <i class="bi bi-x"></i>
-              </button>
-            </div>
-
-            <!-- Dropdown Results -->
-            <div
-              v-if="isSearchDropdownOpen && filteredClients.length > 0"
-              class="search-dropdown-menu shadow-lg"
-            >
-              <div
-                v-for="c in filteredClients"
-                :key="c.id"
-                class="search-item p-2 border-bottom border-secondary border-opacity-25 cursor-pointer"
-                @click="selectClient(c)"
-              >
-                <div class="fw-bold text-light">{{ c.companyName }}</div>
-                <div class="small text-muted font-monospace">
-                  BIN: {{ c.binNumber || 'N/A' }} • Mobile: {{ c.mobile || 'N/A' }}
-                </div>
-              </div>
-            </div>
+            <ClientSearchSelect
+              v-model="selectedClientId"
+              :clients="clients"
+              placeholder="Type to search company name, BIN, or mobile..."
+            />
           </div>
 
           <!-- Client Details & Outstanding Balance Banner -->

@@ -2,7 +2,6 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
-import * as XLSX from "xlsx";
 import MonthNavigator from "@/components/MonthNavigator.vue";
 import { useToast } from "@/composables/useToast";
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import axios from "axios";
 import { pulse } from "@/plugins/pulse";
 import { useToast } from "@/composables/useToast";
+import SearchInput from "@/components/common/SearchInput.vue";
 
 const toast = useToast();
 
@@ -17,9 +18,21 @@ interface MappingRow {
 
 const rows = ref<MappingRow[]>([]);
 const originalRows = ref<MappingRow[]>([]);
+const searchQuery = ref("");
 const isLoading = ref(false);
 const isSaving = ref(false);
 const isEditMode = ref(false);
+
+const filteredRows = computed(() => {
+  if (!searchQuery.value.trim()) return rows.value;
+  const q = searchQuery.value.toLowerCase().trim();
+  return rows.value.filter(
+    (r) =>
+      r.label.toLowerCase().includes(q) ||
+      r.dbColumn.toLowerCase().includes(q) ||
+      (r.excelHeader && r.excelHeader.toLowerCase().includes(q))
+  );
+});
 
 // Single Edit Modal State
 const showSingleModal = ref(false);
@@ -195,6 +208,11 @@ const saveSingleEdit = async () => {
       </div>
     </div>
 
+    <!-- Search Toolbar -->
+    <div v-if="rows.length > 0 || searchQuery" class="d-flex gap-2 mb-3">
+      <SearchInput v-model="searchQuery" placeholder="Search column mappings..." max-width="320px" />
+    </div>
+
     <!-- Table Card -->
     <div class="table-card position-relative">
       <div v-if="isLoading" class="p-5 text-center text-muted">
@@ -210,7 +228,12 @@ const saveSingleEdit = async () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.dbColumn">
+          <tr v-if="filteredRows.length === 0">
+            <td colspan="3" class="text-center py-4 text-muted">
+              No column mappings matching "{{ searchQuery }}"
+            </td>
+          </tr>
+          <tr v-for="row in filteredRows" :key="row.dbColumn">
             <td>
               <span class="text-light fw-medium font-monospace">{{ row.label }}</span>
               <span v-if="row.isCalculated" class="badge-calculated ms-2">
