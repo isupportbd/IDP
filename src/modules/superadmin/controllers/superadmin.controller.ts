@@ -1256,9 +1256,7 @@ const DEFAULT_SYSTEM_COLUMN_MAPPINGS = [
   { dbColumn: "base_value_of_vat", label: "base_value_of_vat", excelHeader: "", isCalculated: true, isFromDb: false, isRegexExtracted: false },
   { dbColumn: "vat", label: "vat", excelHeader: "VAT", isCalculated: false, isFromDb: false, isRegexExtracted: false },
   { dbColumn: "unit_value", label: "unit_value", excelHeader: "", isCalculated: true, isFromDb: false, isRegexExtracted: false },
-  { dbColumn: "at", label: "at", excelHeader: "AT", isCalculated: false, isFromDb: false, isRegexExtracted: false },
-  { dbColumn: "bin", label: "bin", excelHeader: "BIN", isCalculated: false, isFromDb: false, isRegexExtracted: false },
-  { dbColumn: "client_name", label: "client_name", excelHeader: "Client Name", isCalculated: false, isFromDb: false, isRegexExtracted: false }
+  { dbColumn: "at", label: "at", excelHeader: "AT", isCalculated: false, isFromDb: false, isRegexExtracted: false }
 ];
 
 // 11. Column Mappings (Operating on master column_mappings table)
