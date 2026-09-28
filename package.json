@@ -16,6 +16,8 @@
     "maildev:view": "bun src/framework/maker-cli/index.mjs maildev:view",
     "redis:view": "bun src/framework/maker-cli/index.mjs redis:view",
     "db:studio": "bun src/framework/maker-cli/index.mjs db:studio",
+    "db:migrate:run": "bun src/framework/maker-cli/index.mjs db:migrate:run",
+    "db:migrate": "bun src/framework/maker-cli/index.mjs db:migrate",
     "maker": "bun src/framework/maker-cli/index.mjs",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

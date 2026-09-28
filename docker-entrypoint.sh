@@ -2,9 +2,11 @@
 
 # Auto-migrate database tables and sync initial setup
 if [ -n "$DATABASE_URL" ]; then
-  echo "=> Syncing database migrations..."
-  bun run maker db:migrate:run || true
-  bun src/database/init-superadmin-db.ts || true
+  echo "=> Running Drizzle migrations (db:migrate:run)..."
+  bun src/framework/maker-cli/index.mjs db:migrate:run || echo "[WARN] Drizzle migrate:run failed or partially applied, continuing..."
+
+  echo "=> Syncing database schema and SuperAdmin account..."
+  bun src/database/init-superadmin-db.ts || echo "[WARN] SuperAdmin sync failed, continuing..."
 fi
 
 # Start IDP-V2 server
