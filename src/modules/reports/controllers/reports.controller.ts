@@ -1,12 +1,13 @@
 import type { Context } from "hono";
 import { db } from "@/framework/database/connection.js";
+import { resolveTenantContext } from "@/framework/facade.js";
 import { purchases } from "@/modules/clients/database/models/purchases.js";
 import { salesRates } from "@/modules/clients/database/models/sales_rates.js";
 import { clients } from "@/modules/clients/database/models/clients.js";
 import { globalItems } from "@/modules/superadmin/database/models/global_items.js";
 import { unitConversions } from "@/modules/superadmin/database/models/unit_conversions.js";
 import { vatNotes } from "@/modules/superadmin/database/models/vat_notes.js";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, or, sql } from "drizzle-orm";
 
 // GET /api/reports/monthly-summary
 export const getMonthlySummary = async (c: Context) => {
@@ -15,6 +16,12 @@ export const getMonthlySummary = async (c: Context) => {
     if (!month) {
       return c.json({ success: false, message: "month is required" }, 400);
     }
+
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
+
+    const tenantFilter = !isSuperAdmin && tenantAdminId
+      ? sql`AND (c.created_by = ${tenantAdminId} OR p.admin_id = ${tenantAdminId})`
+      : sql``;
 
     const rawSql = sql`
       SELECT 
@@ -25,6 +32,7 @@ export const getMonthlySummary = async (c: Context) => {
       FROM clients c
       INNER JOIN purchases p ON c.id = p.client_id
       WHERE p.month = ${month}
+        ${tenantFilter}
       GROUP BY c.id, c.company_name, c.bin_number
       ORDER BY "clientName" ASC
     `;
@@ -55,6 +63,29 @@ export const getSalesReport = async (c: Context) => {
 
     if (!clientId || !month) {
       return c.json({ success: false, message: "clientId and month are required" }, 400);
+    }
+
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
+    const parsedClientId = parseInt(clientId);
+
+    // Verify client belongs to current tenant
+    if (!isSuperAdmin && tenantAdminId) {
+      const client = (
+        await db
+          .select({ id: clients.id })
+          .from(clients)
+          .where(
+            and(
+              eq(clients.id, parsedClientId),
+              or(eq(clients.createdBy, tenantAdminId), sql`${clients.createdBy} IS NULL`)
+            )
+          )
+          .limit(1)
+      )[0];
+
+      if (!client) {
+        return c.json({ success: false, message: "Client not found or unauthorized access" }, 403);
+      }
     }
 
     const [yearStr, monthStr] = month.split("-");
@@ -89,7 +120,7 @@ export const getSalesReport = async (c: Context) => {
         LIMIT 1
       ) sr ON true
       LEFT JOIN unit_conversions uc ON sr.unit_id = uc.id
-      WHERE p.client_id = ${parseInt(clientId)}
+      WHERE p.client_id = ${parsedClientId}
         AND p.month = ${month}
         ${itemId ? sql`AND p.item_id = ${parseInt(itemId)}` : sql``}
       GROUP BY p.item_id, i.name, i.hs_code, p.is_ffs, p.is_rebate
@@ -164,6 +195,29 @@ export const getStatementReport = async (c: Context) => {
       return c.json({ success: false, message: "clientId and month are required" }, 400);
     }
 
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
+    const parsedClientId = parseInt(clientId);
+
+    // Verify client belongs to current tenant
+    if (!isSuperAdmin && tenantAdminId) {
+      const client = (
+        await db
+          .select({ id: clients.id })
+          .from(clients)
+          .where(
+            and(
+              eq(clients.id, parsedClientId),
+              or(eq(clients.createdBy, tenantAdminId), sql`${clients.createdBy} IS NULL`)
+            )
+          )
+          .limit(1)
+      )[0];
+
+      if (!client) {
+        return c.json({ success: false, message: "Client not found or unauthorized access" }, 403);
+      }
+    }
+
     const purchaseData = await db
       .select({
         id: purchases.id,
@@ -175,7 +229,7 @@ export const getStatementReport = async (c: Context) => {
       })
       .from(purchases)
       .leftJoin(globalItems, eq(purchases.itemId, globalItems.id))
-      .where(and(eq(purchases.clientId, parseInt(clientId)), eq(purchases.month, month)));
+      .where(and(eq(purchases.clientId, parsedClientId), eq(purchases.month, month)));
 
     const purchasesByItemAndDate: Record<number, Record<string, number>> = {};
     for (const p of purchaseData) {
@@ -205,7 +259,7 @@ export const getStatementReport = async (c: Context) => {
       })
       .from(salesRates)
       .leftJoin(unitConversions, eq(salesRates.unitId, unitConversions.id))
-      .where(eq(salesRates.clientId, parseInt(clientId)))
+      .where(eq(salesRates.clientId, parsedClientId))
       .orderBy(salesRates.itemId, salesRates.activationDate);
 
     const ratesByItem: Record<number, any[]> = {};

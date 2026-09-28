@@ -24,7 +24,7 @@ export async function resolveServeStatic() {
 let _storageStaticMiddleware: ReturnType<Awaited<ReturnType<typeof resolveServeStatic>>> | null = null;
 
 /**
- * Why: Serves public storage files under `/storage/*` URL space.
+ * Why: Serves public storage files under `/storage/*` URL space with 1-day caching.
  * When: Clients request uploaded public assets.
  * Where: App middleware stack.
  * How: Maps `/storage` path prefix to local storage public directory.
@@ -37,6 +37,7 @@ export async function storageStaticMiddleware(c: any, next: any) {
       rewriteRequestPath: (path) => path.replace(/^\/storage/, "")
     });
   }
+  c.header("Cache-Control", "public, max-age=86400");
   return _storageStaticMiddleware(c, next);
 }
 
@@ -52,6 +53,13 @@ function ensurePublicDir() {
 
 async function uiStaticMiddleware(c: any, next: any) {
   ensurePublicDir();
+  const path = c.req.path;
+
+  // High-performance caching for hashed assets (JS, CSS, fonts, images)
+  if (path.startsWith("/assets/") || path.endsWith(".js") || path.endsWith(".css") || path.endsWith(".woff2") || path.endsWith(".woff")) {
+    c.header("Cache-Control", "public, max-age=31536000, immutable");
+  }
+
   if (!_uiStaticMiddleware) {
     const serveStatic = await resolveServeStatic();
     _uiStaticMiddleware = serveStatic({ root: "./public" });
@@ -61,6 +69,7 @@ async function uiStaticMiddleware(c: any, next: any) {
 
 async function uiIndexMiddleware(c: any, next: any) {
   ensurePublicDir();
+  c.header("Cache-Control", "no-cache, no-store, must-revalidate");
   if (!_uiIndexMiddleware) {
     const serveStatic = await resolveServeStatic();
     _uiIndexMiddleware = serveStatic({ path: "./public/index.html" });

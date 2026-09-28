@@ -1,7 +1,9 @@
-import { boolean, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { users } from "@/modules/auth/database/models/user.js";
 
 export const companySettings = pgTable("company_settings", {
   id: serial("id").primaryKey(),
+  adminId: integer("admin_id").references(() => users.id, { onDelete: "cascade" }),
   companyName: varchar("company_name", { length: 255 }).notNull().default("ASSOCIATES & CO. VAT & TAX CONSULTANCY"),
   proprietorName: varchar("proprietor_name", { length: 255 }).default("Advocate Md. Ruhul Amin"),
   phone: varchar("phone", { length: 50 }).default("+880 1819-234567"),
@@ -22,3 +24,4 @@ export const companySettings = pgTable("company_settings", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });
+

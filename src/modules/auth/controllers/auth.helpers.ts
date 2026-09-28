@@ -25,12 +25,20 @@ async function getTenantStorageRecords(tenantAdminId: number): Promise<number> {
     const [pRes, cRes, sRes, bRes] = await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(purchases).where(eq(purchases.adminId, tenantAdminId)),
       db.select({ count: sql<number>`count(*)` }).from(clients).where(eq(clients.createdBy, tenantAdminId)),
-      db.select({ count: sql<number>`count(*)` }).from(vatSubmissions).where(eq(vatSubmissions.submittedBy, tenantAdminId)),
-      db.select({ count: sql<number>`count(*)` }).from(bills).where(eq(bills.createdBy, tenantAdminId))
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(vatSubmissions)
+        .innerJoin(clients, eq(vatSubmissions.clientId, clients.id))
+        .where(eq(clients.createdBy, tenantAdminId)),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(bills)
+        .innerJoin(clients, eq(bills.clientId, clients.id))
+        .where(eq(clients.createdBy, tenantAdminId))
     ]);
 
     const total = Number(pRes[0]?.count || 0) + Number(cRes[0]?.count || 0) + Number(sRes[0]?.count || 0) + Number(bRes[0]?.count || 0);
-    storageCache.set(tenantAdminId, { records: total, expiresAt: now + 30000 });
+    storageCache.set(tenantAdminId, { records: total, expiresAt: now + 180000 });
     return total;
   } catch {
     return cached?.records ?? 0;
@@ -45,7 +53,27 @@ async function getTenantStorageRecords(tenantAdminId: number): Promise<number> {
 export async function sanitizeUser(user: any) {
   let plan = null;
   let requiredPlanPrice = 0;
-  let isYearly = (user.billingCycle === "yearly");
+  const isYearly = user.billingCycle === "yearly";
+
+  let effectiveAdvanceBalance = user.advanceBalance ?? 0;
+  let effectiveSmsBalance = (user as any).smsBalance ?? 0;
+  let extraStorageMB = user.extraStorageMB ?? 0;
+  let effectiveExpDate = user.expDate;
+  const tenantAdminId = user.adminId ? Number(user.adminId) : user.id;
+
+  if (user.adminId) {
+    try {
+      const adminUser = await db.query.users.findFirst({
+        where: eq(users.id, Number(user.adminId))
+      });
+      if (adminUser) {
+        effectiveAdvanceBalance = adminUser.advanceBalance ?? 0;
+        effectiveSmsBalance = (adminUser as any).smsBalance ?? 0;
+        extraStorageMB = adminUser.extraStorageMB ?? 0;
+        effectiveExpDate = adminUser.expDate;
+      }
+    } catch {}
+  }
 
   try {
     const effectivePlanId = user.planId || (user.adminId ? (await db.query.users.findFirst({ where: eq(users.id, user.adminId) }))?.planId : null);
@@ -71,9 +99,9 @@ export async function sanitizeUser(user: any) {
     console.error("Error fetching plan for user:", e);
   }
 
-  // Auto-renewal check: If expired or never activated, but wallet balance covers requiredPlanPrice
-  const isExpired = !user.expDate || new Date(user.expDate) <= new Date();
-  if (user.planId && requiredPlanPrice > 0 && isExpired && (user.advanceBalance || 0) >= requiredPlanPrice) {
+  // Auto-renewal check for tenant admin: If expired or never activated, but wallet balance covers requiredPlanPrice
+  const isExpired = !effectiveExpDate || new Date(effectiveExpDate) <= new Date();
+  if (!user.adminId && user.planId && requiredPlanPrice > 0 && isExpired && (user.advanceBalance || 0) >= requiredPlanPrice) {
     try {
       const newBalance = (user.advanceBalance || 0) - requiredPlanPrice;
       const newExp = new Date();
@@ -110,30 +138,14 @@ export async function sanitizeUser(user: any) {
 
       user.advanceBalance = newBalance;
       user.expDate = newExp;
+      effectiveAdvanceBalance = newBalance;
+      effectiveExpDate = newExp;
     } catch (renewErr) {
       console.error("Failed to auto-renew user plan:", renewErr);
     }
   }
 
-  let effectiveAdvanceBalance = user.advanceBalance ?? 0;
-  let effectiveSmsBalance = (user as any).smsBalance ?? 0;
-  let extraStorageMB = user.extraStorageMB ?? 0;
-  const tenantAdminId = user.adminId ? Number(user.adminId) : user.id;
-
-  if (user.adminId) {
-    try {
-      const adminUser = await db.query.users.findFirst({
-        where: eq(users.id, Number(user.adminId))
-      });
-      if (adminUser) {
-        effectiveAdvanceBalance = adminUser.advanceBalance ?? 0;
-        effectiveSmsBalance = (adminUser as any).smsBalance ?? 0;
-        extraStorageMB = adminUser.extraStorageMB ?? 0;
-      }
-    } catch {}
-  }
-
-  const isSubscriptionActive = !!(user.expDate && new Date(user.expDate) > new Date());
+  const isSubscriptionActive = !!(effectiveExpDate && new Date(effectiveExpDate) > new Date());
   const shortage = isSubscriptionActive ? 0 : Math.max(0, requiredPlanPrice - effectiveAdvanceBalance);
 
   // Calculate storage usage metrics
@@ -168,7 +180,7 @@ export async function sanitizeUser(user: any) {
     isStorageWarning,
     isStorageExhausted,
     adminId: user.adminId ?? null,
-    expDate: user.expDate ? String(user.expDate) : null,
+    expDate: effectiveExpDate ? String(effectiveExpDate) : null,
     plan,
     emailVerifiedAt: user.emailVerifiedAt ? String(user.emailVerifiedAt) : null,
     roleId: user.roleId ?? null,

@@ -33,6 +33,7 @@ export const salesRates = pgTable(
     adminIdIdx: index("sales_rates_admin_id_idx").on(table.adminId),
     clientIdIdx: index("sales_rates_client_id_idx").on(table.clientId),
     itemIdIdx: index("sales_rates_item_id_idx").on(table.itemId),
-    clientStatusIdx: index("sales_rates_client_status_idx").on(table.clientId, table.status)
+    clientStatusIdx: index("sales_rates_client_status_idx").on(table.clientId, table.status),
+    ratesLookupIdx: index("sales_rates_lookup_idx").on(table.clientId, table.itemId, table.status, table.activationDate)
   })
 );

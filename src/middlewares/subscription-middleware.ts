@@ -95,8 +95,16 @@ export async function subscriptionMiddleware(c: Context, next: Next) {
       try {
         const [pCount] = await db.select({ count: sql<number>`count(*)` }).from(purchases).where(eq(purchases.adminId, tenantAdminId));
         const [cCount] = await db.select({ count: sql<number>`count(*)` }).from(clients).where(eq(clients.createdBy, tenantAdminId));
-        const [sCount] = await db.select({ count: sql<number>`count(*)` }).from(vatSubmissions).where(eq(vatSubmissions.submittedBy, tenantAdminId));
-        const [bCount] = await db.select({ count: sql<number>`count(*)` }).from(bills).where(eq(bills.createdBy, tenantAdminId));
+        const [sCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(vatSubmissions)
+          .innerJoin(clients, eq(vatSubmissions.clientId, clients.id))
+          .where(eq(clients.createdBy, tenantAdminId));
+        const [bCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(bills)
+          .innerJoin(clients, eq(bills.clientId, clients.id))
+          .where(eq(clients.createdBy, tenantAdminId));
         totalRecords = Number(pCount?.count || 0) + Number(cCount?.count || 0) + Number(sCount?.count || 0) + Number(bCount?.count || 0);
       } catch {}
 

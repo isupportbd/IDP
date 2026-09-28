@@ -63,6 +63,17 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
     await executeSingleSql(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_clients INTEGER NOT NULL DEFAULT 50`);
     await executeSingleSql(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_storage_mb INTEGER NOT NULL DEFAULT 1024`);
     await executeSingleSql(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS has_accounts BOOLEAN NOT NULL DEFAULT false`);
+
+    // Ensure tenant admin_id columns exist on firm tables
+    await executeSingleSql(`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS admin_id INTEGER`);
+    await executeSingleSql(`ALTER TABLE bank_accounts ADD COLUMN IF NOT EXISTS admin_id INTEGER`);
+    await executeSingleSql(`ALTER TABLE expense_heads ADD COLUMN IF NOT EXISTS admin_id INTEGER`);
+
+    // Ensure high-performance composite indexes exist
+    await executeSingleSql(`CREATE INDEX IF NOT EXISTS purchases_admin_month_idx ON purchases (admin_id, month)`);
+    await executeSingleSql(`CREATE INDEX IF NOT EXISTS purchases_client_month_idx ON purchases (client_id, month)`);
+    await executeSingleSql(`CREATE INDEX IF NOT EXISTS purchases_client_be_date_idx ON purchases (client_id, be_date)`);
+    await executeSingleSql(`CREATE INDEX IF NOT EXISTS sales_rates_lookup_idx ON sales_rates (client_id, item_id, status, activation_date)`);
   } catch (rErr) {
     console.warn("[DB Roles Warning]", rErr);
   }

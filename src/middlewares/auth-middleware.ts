@@ -102,6 +102,7 @@ export async function authMiddleware(c: Context, next: Next) {
     {
       id: user.id,
       email: user.email,
+      adminId: user.adminId ?? null,
       roleId: user.role?.id ?? null,
       role: user.role?.name ?? null
     },

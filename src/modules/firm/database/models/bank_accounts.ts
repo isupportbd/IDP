@@ -1,7 +1,9 @@
-import { boolean, pgTable, serial, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, serial, timestamp, varchar } from "drizzle-orm/pg-core";
+import { users } from "@/modules/auth/database/models/user.js";
 
 export const bankAccounts = pgTable("bank_accounts", {
   id: serial("id").primaryKey(),
+  adminId: integer("admin_id").references(() => users.id, { onDelete: "cascade" }),
   bankName: varchar("bank_name", { length: 150 }).notNull(),
   accountName: varchar("account_name", { length: 150 }).notNull(),
   accountNumber: varchar("account_number", { length: 100 }).notNull(),
@@ -14,3 +16,4 @@ export const bankAccounts = pgTable("bank_accounts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });
+

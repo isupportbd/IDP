@@ -65,7 +65,7 @@ export async function initDatabase() {
       throw new Error("Missing mysql dependencies. Install with: bun add drizzle-orm mysql2");
     }
 
-    pool = mysql.createPool({ uri: databaseConfig.url, connectionLimit: 10, enableKeepAlive: true });
+    pool = mysql.createPool({ uri: databaseConfig.url, connectionLimit: 25, enableKeepAlive: true });
     databaseInstance = drizzleMysql(pool, { schema, mode: "default" });
     return databaseInstance;
   }
@@ -81,7 +81,12 @@ export async function initDatabase() {
     throw new Error("Missing postgres dependencies. Install with: bun add drizzle-orm postgres");
   }
 
-  pool = postgres(databaseConfig.url);
+  pool = postgres(databaseConfig.url, {
+    max: 25,
+    idle_timeout: 30,
+    connect_timeout: 10,
+    max_lifetime: 1800
+  });
   databaseInstance = drizzlePg(pool, { schema });
   return databaseInstance;
 }
