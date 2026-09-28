@@ -43,7 +43,7 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
     console.warn("[DB Sync Migration Warning]", mErr);
   }
 
-  // 2. Ensure Roles table and system roles exist
+  // 2. Ensure Roles table and cleanup stale mappings
   try {
     await executeSingleSql(`
       CREATE TABLE IF NOT EXISTS roles (
@@ -56,6 +56,8 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
     await executeSingleSql(
       `INSERT INTO roles (name) VALUES ('superadmin'), ('admin'), ('user') ON CONFLICT (name) DO NOTHING`
     );
+    // Auto-clean stale column mapping entries
+    await executeSingleSql(`DELETE FROM column_mappings WHERE db_column IN ('client_name', 'bin')`);
   } catch (rErr) {
     console.warn("[DB Roles Warning]", rErr);
   }
