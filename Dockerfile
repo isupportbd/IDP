@@ -31,13 +31,15 @@ COPY src ./src
 # Frontend build output
 COPY --from=builder /app/public ./public
 
-# Config files
+# Config files & Startup Entrypoint
 COPY drizzle.config.ts ./
 COPY tsconfig.json ./
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 EXPOSE 80 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD bun --eval "fetch(\`http://localhost:\${process.env.APP_PORT || 80}/health\`).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["bun", "src/framework/server.ts"]
+CMD ["/bin/sh", "/app/docker-entrypoint.sh"]
