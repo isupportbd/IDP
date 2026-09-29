@@ -626,16 +626,19 @@ const sendTestSms = async () => {
 
 const handleResetToDefault = async () => {
   try {
+    const userName = (authStore.user as any)?.name || "";
+    const userEmail = (authStore.user as any)?.email || "";
+    const userPhone = (authStore.user as any)?.mobile || "";
     form.value = {
-      companyName: "ASSOCIATES & CO. VAT & TAX CONSULTANCY",
-      proprietorName: "Advocate Md. Ruhul Amin",
-      phone: "+880 1819-234567",
-      email: "billing@associatesvat.com",
-      website: "https://associatesvat.com",
-      address: "Suite # 504, City Heart Building, 67 Naya Paltan, VIP Road, Dhaka-1000",
-      binNumber: "001234567-0101",
-      tinNumber: "782910384721",
-      tradeLicenseNo: "TRAD/DSCC/038291",
+      companyName: userName,
+      proprietorName: userName,
+      phone: userPhone,
+      email: userEmail,
+      website: "",
+      address: "",
+      binNumber: "",
+      tinNumber: "",
+      tradeLicenseNo: "",
       invoicePrefix: "INV",
       startingInvoiceNumber: 1001,
       currentInvoiceSequence: 1001,
@@ -645,7 +648,7 @@ const handleResetToDefault = async () => {
       currency: "BDT (৳)",
       decimalPlaces: 2,
       invoiceTerms: "1. Payment is due within 15 days of invoice date.\n2. Please mention the invoice number as reference in payment.\n3. Checks/Transfers are subject to realization.",
-      invoiceFooterText: "Thank you for your business. For any invoice queries, contact billing@associatesvat.com.",
+      invoiceFooterText: "",
       receiptFooterText: "This is a computer-generated money receipt and does not require a physical signature.",
       autoDueCarryForward: true,
       binUniqueEnforcement: true,

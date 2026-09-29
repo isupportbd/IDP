@@ -12,27 +12,54 @@ import { expenseHeads } from "../database/models/expense_heads.js";
 export const getCompanySettings: Handler = async (c: any) => {
   try {
     const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
-    const targetAdminId = tenantAdminId || 1;
+    const targetAdminId = tenantAdminId || (isSuperAdmin ? null : 1);
+
+    if (!targetAdminId) {
+      // If superadmin has no tenant context, return an empty template
+      return c.json({
+        message: "Company settings retrieved",
+        data: {
+          companyName: "",
+          proprietorName: "",
+          phone: "",
+          email: "",
+          website: "",
+          address: "",
+          binNumber: "",
+          tinNumber: "",
+          tradeLicenseNo: "",
+          invoicePrefix: "INV",
+          receiptPrefix: "MR"
+        }
+      }, HttpStatusCodes.OK);
+    }
 
     let settings = (
       await db
         .select()
         .from(companySettings)
-        .where(
-          isSuperAdmin
-            ? or(eq(companySettings.adminId, targetAdminId), sql`${companySettings.adminId} IS NULL`)
-            : or(eq(companySettings.adminId, targetAdminId), sql`${companySettings.adminId} IS NULL`)
-        )
-        .orderBy(desc(companySettings.adminId))
+        .where(eq(companySettings.adminId, targetAdminId))
         .limit(1)
     )[0];
 
     if (!settings) {
-      // Create initial settings record for this tenant
+      // Find the user details to prefill the tenant's company name/email/phone
+      const [adminUser] = await db.select().from(users).where(eq(users.id, targetAdminId)).limit(1);
       settings = (
         await db
           .insert(companySettings)
-          .values({ adminId: targetAdminId })
+          .values({
+            adminId: targetAdminId,
+            companyName: adminUser?.name || "",
+            proprietorName: adminUser?.name || "",
+            phone: adminUser?.mobile || "",
+            email: adminUser?.email || "",
+            website: "",
+            address: "",
+            binNumber: "",
+            tinNumber: "",
+            tradeLicenseNo: ""
+          })
           .returning()
       )[0];
     }
@@ -45,18 +72,14 @@ export const getCompanySettings: Handler = async (c: any) => {
 export const updateCompanySettings: Handler = async (c: any) => {
   try {
     const body = c.req.valid("json");
-    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
+    const { tenantAdminId } = await resolveTenantContext(c);
     const targetAdminId = tenantAdminId || 1;
 
     let existing = (
       await db
         .select()
         .from(companySettings)
-        .where(
-          isSuperAdmin
-            ? or(eq(companySettings.adminId, targetAdminId), sql`${companySettings.adminId} IS NULL`)
-            : eq(companySettings.adminId, targetAdminId)
-        )
+        .where(eq(companySettings.adminId, targetAdminId))
         .limit(1)
     )[0];
 
@@ -67,7 +90,7 @@ export const updateCompanySettings: Handler = async (c: any) => {
           .update(companySettings)
           .set({
             ...body,
-            adminId: existing.adminId || targetAdminId,
+            adminId: targetAdminId,
             updatedAt: new Date()
           })
           .where(eq(companySettings.id, existing.id))

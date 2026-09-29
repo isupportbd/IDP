@@ -131,7 +131,23 @@ export const register: Handler = async (c: any) => {
       with: { role: true }
     });
 
-    if (!user) throw new Error("Inserted user not found");
+    // Initialize clean firm profile for tenant
+    try {
+      await db.insert(companySettings).values({
+        adminId: user.id,
+        companyName: user.name || "",
+        proprietorName: user.name || "",
+        phone: user.mobile || "",
+        email: user.email || "",
+        website: "",
+        address: "",
+        binNumber: "",
+        tinNumber: "",
+        tradeLicenseNo: ""
+      });
+    } catch (csErr) {
+      console.error("Failed to initialize company settings for new user:", csErr);
+    }
 
     if (targetStatus === "pending") {
       // Record initial signup deposit transaction
