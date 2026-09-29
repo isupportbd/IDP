@@ -42,16 +42,13 @@ export const RechargeWalletSchema = z.object({
 
 export const RegisterSchema = z
   .object({
-    name: z.string().min(2).max(100),
-    email: z.email(),
+    name: z.string().min(2, "Name must be at least 2 characters").max(100),
+    email: z.email("Invalid email address"),
     mobile: z.string().optional().nullable(),
     password: z
       .string()
-      .min(6)
-      .max(100)
-      .regex(/[a-z]/, "Password must contain lowercase letter")
-      .regex(/[A-Z]/, "Password must contain uppercase letter")
-      .regex(/[^A-Za-z0-9]/, "Password must contain special character"),
+      .min(6, "Password must be at least 6 characters")
+      .max(100),
     password_confirmation: z.string().optional().nullable(),
     planId: z.number().optional().nullable(),
     billingCycle: z.string().optional().nullable(),
@@ -69,26 +66,23 @@ export const RegisterSchema = z
   });
 
 export const LoginSchema = z.object({
-  email: z.email(),
-  password: z.string().min(1),
+  email: z.email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
   remember: z.boolean().optional().default(false)
 });
 
 export const ForgotPasswordSchema = z.object({
-  email: z.email()
+  email: z.email("Invalid email address")
 });
 
 export const ResetPasswordSchema = z
   .object({
-    email: z.email(),
+    email: z.email("Invalid email address"),
     token: z.string().min(1),
     password: z
       .string()
-      .min(6)
-      .max(100)
-      .regex(/[a-z]/, "Password must contain lowercase letter")
-      .regex(/[A-Z]/, "Password must contain uppercase letter")
-      .regex(/[^A-Za-z0-9]/, "Password must contain special character"),
+      .min(6, "Password must be at least 6 characters")
+      .max(100),
     password_confirmation: z.string()
   })
   .superRefine((data, ctx) => {

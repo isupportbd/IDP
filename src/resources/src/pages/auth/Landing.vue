@@ -115,6 +115,60 @@ const openSignup = (plan: any) => {
   successMsg.value = "";
 };
 
+const formatApiError = (err: any): string => {
+  const data = err?.response?.data;
+  if (!data) return err?.message || "Registration failed. Please try again.";
+
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.issues && Array.isArray(parsed.issues)) {
+        return parsed.issues.map((i: any) => i.message).filter(Boolean).join(", ") || "Invalid input data";
+      }
+      return parsed.message || parsed.error || data;
+    } catch {
+      return data;
+    }
+  }
+
+  if (data.issues && Array.isArray(data.issues)) {
+    return data.issues.map((i: any) => i.message).filter(Boolean).join(", ") || "Invalid input data";
+  }
+
+  if (data.error) {
+    if (typeof data.error === "string") {
+      try {
+        const parsed = JSON.parse(data.error);
+        if (parsed.issues && Array.isArray(parsed.issues)) {
+          return parsed.issues.map((i: any) => i.message).filter(Boolean).join(", ");
+        }
+        return parsed.message || parsed.error || data.error;
+      } catch {
+        return data.error;
+      }
+    }
+    if (typeof data.error === "object" && data.error.issues) {
+      return data.error.issues.map((i: any) => i.message).filter(Boolean).join(", ");
+    }
+    return String(data.error);
+  }
+
+  if (data.message) {
+    if (typeof data.message === "string") {
+      try {
+        const parsed = JSON.parse(data.message);
+        if (parsed.issues && Array.isArray(parsed.issues)) {
+          return parsed.issues.map((i: any) => i.message).filter(Boolean).join(", ");
+        }
+      } catch {}
+      return data.message;
+    }
+    return String(data.message);
+  }
+
+  return "Registration failed. Please check the entered information.";
+};
+
 const handleSignup = async () => {
   errorMsg.value = "";
   successMsg.value = "";
@@ -126,6 +180,11 @@ const handleSignup = async () => {
 
   if (!name.value || !email.value || !mobile.value || !password.value) {
     errorMsg.value = "Please fill out all required fields.";
+    return;
+  }
+
+  if (password.value.length < 6) {
+    errorMsg.value = "Password must be at least 6 characters.";
     return;
   }
 
@@ -176,7 +235,7 @@ const handleSignup = async () => {
       errorMsg.value = "Registration failed: " + (res.data?.error || res.data?.message || "Error");
     }
   } catch (error: any) {
-    errorMsg.value = error?.response?.data?.error || error?.response?.data?.message || "Registration failed. Please try again.";
+    errorMsg.value = formatApiError(error);
   } finally {
     isSubmitting.value = false;
   }
