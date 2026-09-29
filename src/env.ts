@@ -9,7 +9,7 @@ const envSchema = z
     APP_NAME: z.string().default("nexgen"),
     APP_ENV: z.enum(["development", "production", "test"]).default("development"),
     APP_PORT: z.coerce.number().default(3000),
-    APP_URL: z.string().trim().min(1, "APP_URL is required in .env"),
+    APP_URL: z.string().trim().default("http://localhost:3000"),
     UI: z
       .string()
       .default("true")
@@ -28,9 +28,9 @@ const envSchema = z
       .string()
       .default("nexgen")
       .transform((value) => value.trim()),
-    JWT_ACCESS_SECRET: z.string(),
-    JWT_REFRESH_SECRET: z.string(),
-    COOKIE_SECRET: z.string(),
+    JWT_ACCESS_SECRET: z.string().default("idp_jwt_access_secret_key_default_2026"),
+    JWT_REFRESH_SECRET: z.string().default("idp_jwt_refresh_secret_key_default_2026"),
+    COOKIE_SECRET: z.string().default("idp_cookie_secret_key_default_2026"),
     STORAGE_ACCESS_KEY_ID: z
       .string()
       .optional()
