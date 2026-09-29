@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from "vue-router";
-import { setupRouteProgress } from "@/plugins/routeProgress";
 import { useAuthStore } from "@/stores/auth";
 import { hasRole, isTenantAdmin, canAccessModule } from "@/composables/useAuth";
 
@@ -268,8 +267,6 @@ const router = createRouter({
     return { top: 0 };
   }
 });
-
-setupRouteProgress(router);
 
 router.beforeEach(async (to: RouteLocationNormalized) => {
   const auth = useAuthStore();

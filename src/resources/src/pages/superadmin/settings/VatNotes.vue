@@ -333,11 +333,6 @@ const handleDelete = async (n: VatNote) => {
 <style scoped>
 .settings-page {
   font-family: 'Inter', sans-serif;
-  animation: fadeIn 0.15s ease-in-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .idp-input {

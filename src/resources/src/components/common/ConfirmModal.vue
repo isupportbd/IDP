@@ -77,25 +77,15 @@ defineEmits<{
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
   z-index: 1100;
-  animation: fadeIn 0.15s ease-out;
 }
 .modal-dialog-custom {
   background: #1e293b;
   border: 1px solid rgba(255, 255, 255, 0.12);
   width: 100%;
   max-width: 440px;
-  animation: scaleUp 0.15s ease-out;
 }
 .icon-wrapper {
   width: 44px;
   height: 44px;
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes scaleUp {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
 }
 </style>

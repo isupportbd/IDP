@@ -238,23 +238,26 @@ const closeAllDropdowns = () => {
   showStatsDropdown.value = false;
 };
 
-const handleVisibilityChange = () => {
-  if (!document.hidden && authStore.user) {
-    fetchStats();
-    if (isSuperAdmin.value) {
-      fetchNotifications();
-    }
+const toggleNotifications = () => {
+  showNotifications.value = !showNotifications.value;
+  if (showNotifications.value && isSuperAdmin.value) {
+    fetchNotifications();
   }
 };
 
-let statsTimer: any = null;
+const toggleStatsDropdown = () => {
+  showStatsDropdown.value = !showStatsDropdown.value;
+  if (showStatsDropdown.value) {
+    fetchStats();
+  }
+};
+
 onMounted(() => {
   fetchStats();
   if (isSuperAdmin.value) {
     fetchNotifications();
   }
   window.addEventListener("click", closeAllDropdowns);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
 
   pulse.channel("auth").listen("tenant:signup", () => {
     if (isSuperAdmin.value) fetchNotifications();
@@ -289,21 +292,10 @@ onMounted(() => {
       }
     }
   });
-
-  statsTimer = setInterval(() => {
-    if (!document.hidden && authStore.user) {
-      fetchStats();
-      if (isSuperAdmin.value) {
-        fetchNotifications();
-      }
-    }
-  }, 45000); // 45 seconds visibility-aware auto-refresh
 });
 
 onUnmounted(() => {
   window.removeEventListener("click", closeAllDropdowns);
-  document.removeEventListener("visibilitychange", handleVisibilityChange);
-  if (statsTimer) clearInterval(statsTimer);
   pulse.channel("auth").stopListening("tenant:signup");
   pulse.channel("role:superadmin").stopListening("tenant:signup");
   pulse.channel("role:superadmin").stopListening("tenant:recharge");
@@ -392,7 +384,7 @@ onUnmounted(() => {
           type="button"
           class="btn btn-dark p-0 rounded border border-secondary d-flex align-items-center justify-content-center position-relative"
           style="width: 36px; height: 36px;"
-          @click="showNotifications = !showNotifications"
+          @click="toggleNotifications"
           title="Notifications"
         >
           <i class="bi bi-bell text-light fs-5"></i>
@@ -862,18 +854,7 @@ onUnmounted(() => {
 
 <style scoped>
 .dot-active-pulse {
-  animation: dot-pulse-anim 1.8s ease-in-out infinite;
-}
-
-@keyframes dot-pulse-anim {
-  0%, 100% {
-    transform: scale(0.85);
-    opacity: 0.65;
-  }
-  50% {
-    transform: scale(1.3);
-    opacity: 1;
-  }
+  opacity: 1;
 }
 
 .recharge-btn {

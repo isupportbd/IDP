@@ -31,6 +31,21 @@ html, body {
   min-height: 100vh;
 }
 
+/* Disable page transitions and animations globally for snappy, instant loading */
+*, *::before, *::after {
+  transition: none !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+
+/* Allow system loading spinners to spin */
+.spinner-border,
+.spinner-grow,
+.spin,
+[class*="spinner-"] {
+  animation-duration: 0.75s !important;
+}
+
 
 /* Layout Blueprint Grid System */
 .idp-layout-wrapper {

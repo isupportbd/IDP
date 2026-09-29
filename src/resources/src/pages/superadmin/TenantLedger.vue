@@ -549,13 +549,7 @@ onMounted(fetchLedgerData);
 <style scoped>
 .tenant-ledger-page {
   font-family: 'Inter', sans-serif;
-  animation: fadeIn 0.15s ease-in-out;
   min-height: 85vh;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .table-card {
