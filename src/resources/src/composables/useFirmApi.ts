@@ -70,7 +70,7 @@ export function useFirmApi() {
     invoicePrefix: "INV",
     startingInvoiceNumber: 1001,
     currentInvoiceSequence: 1001,
-    receiptPrefix: "MR",
+    receiptPrefix: "RCP",
     startingReceiptNumber: 5001,
     currentReceiptSequence: 5001,
     currency: "BDT (৳)",

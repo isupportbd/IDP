@@ -15,7 +15,7 @@ export const companySettings = pgTable("company_settings", {
   tradeLicenseNo: varchar("trade_license_no", { length: 100 }).default(""),
   invoicePrefix: varchar("invoice_prefix", { length: 20 }).default("INV"),
   invoiceTerms: text("invoice_terms").default("1. Payment is due within 15 days of invoice date.\n2. Please mention the invoice number as reference in payment.\n3. Checks/Transfers are subject to realization."),
-  receiptPrefix: varchar("receipt_prefix", { length: 20 }).default("MR"),
+  receiptPrefix: varchar("receipt_prefix", { length: 20 }).default("RCP"),
   autoDueCarryForward: boolean("auto_due_carry_forward").default(true).notNull(),
   binUniqueEnforcement: boolean("bin_unique_enforcement").default(true).notNull(),
   allowDuplicateMobile: boolean("allow_duplicate_mobile").default(true).notNull(),

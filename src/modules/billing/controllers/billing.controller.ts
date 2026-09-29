@@ -21,15 +21,16 @@ function r2(num: number): number {
 // ── 1. SEQUENCE GENERATORS ──────────────────────────────────────────
 
 /**
- * Generates sequential Invoice No in format: Inv-YYYY-000001
+ * Generates sequential Invoice No in format: INV-YYYY-000001
  */
-async function generateNextBillNo(year: number): Promise<string> {
-  const prefix = `Inv-${year}-`;
+async function generateNextBillNo(year: number, customPrefix = "INV"): Promise<string> {
+  const cleanPrefix = (customPrefix || "INV").replace(/-+$/, "").toUpperCase();
+  const prefix = `${cleanPrefix}-${year}-`;
   const latestBill = (
     await db
       .select({ billNo: bills.billNo })
       .from(bills)
-      .where(like(bills.billNo, `${prefix}%`))
+      .where(or(like(bills.billNo, `${prefix}%`), ilike(bills.billNo, `%-${year}-%`)))
       .orderBy(desc(bills.id))
       .limit(1)
   )[0];
@@ -38,7 +39,7 @@ async function generateNextBillNo(year: number): Promise<string> {
   if (latestBill && latestBill.billNo) {
     const parts = latestBill.billNo.split("-");
     if (parts.length >= 3) {
-      const numPart = parseInt(parts[2], 10);
+      const numPart = parseInt(parts[parts.length - 1], 10);
       if (!isNaN(numPart)) {
         nextSeq = numPart + 1;
       }
@@ -50,15 +51,16 @@ async function generateNextBillNo(year: number): Promise<string> {
 }
 
 /**
- * Generates sequential Money Receipt No in format: MR-YYYY-000001
+ * Generates sequential Money Receipt No in format: RCP-YYYY-000001
  */
-async function generateNextReceiptNo(year: number): Promise<string> {
-  const prefix = `MR-${year}-`;
+async function generateNextReceiptNo(year: number, customPrefix = "RCP"): Promise<string> {
+  const cleanPrefix = (customPrefix || "RCP").replace(/-+$/, "").toUpperCase();
+  const prefix = `${cleanPrefix}-${year}-`;
   const latestCol = (
     await db
       .select({ receiptNo: collections.receiptNo })
       .from(collections)
-      .where(like(collections.receiptNo, `${prefix}%`))
+      .where(or(like(collections.receiptNo, `${prefix}%`), ilike(collections.receiptNo, `%-${year}-%`)))
       .orderBy(desc(collections.id))
       .limit(1)
   )[0];
@@ -67,7 +69,7 @@ async function generateNextReceiptNo(year: number): Promise<string> {
   if (latestCol && latestCol.receiptNo) {
     const parts = latestCol.receiptNo.split("-");
     if (parts.length >= 3) {
-      const numPart = parseInt(parts[2], 10);
+      const numPart = parseInt(parts[parts.length - 1], 10);
       if (!isNaN(numPart)) {
         nextSeq = numPart + 1;
       }

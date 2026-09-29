@@ -143,9 +143,9 @@ describe("Billing & Collections Module Real Database Tests (PostgreSQL)", () => 
     }
   });
 
-  it("should generate sequential invoice number Inv-YYYY-000001", async () => {
+  it("should generate sequential invoice number INV-YYYY-000001", async () => {
     const year = 2026;
-    const prefix = `Inv-${year}-`;
+    const prefix = `INV-${year}-`;
     const latestBill = (
       await db
         .select({ billNo: bills.billNo })
@@ -164,7 +164,7 @@ describe("Billing & Collections Module Real Database Tests (PostgreSQL)", () => 
     }
 
     const billNo = `${prefix}${String(nextNum).padStart(6, "0")}`;
-    expect(billNo).toMatch(/^Inv-2026-\d{6}$/);
+    expect(billNo).toMatch(/^INV-2026-\d{6}$/);
 
     const newBill = (
       await db

@@ -979,7 +979,7 @@ onMounted(async () => {
                 type="text"
                 class="form-control idp-input font-monospace"
                 :disabled="!isEditingBranding"
-                placeholder="INV-"
+                placeholder="INV"
               />
             </div>
 
@@ -990,7 +990,7 @@ onMounted(async () => {
                 type="text"
                 class="form-control idp-input font-monospace"
                 :disabled="!isEditingBranding"
-                placeholder="REC-"
+                placeholder="RCP"
               />
             </div>
 
@@ -1001,7 +1001,7 @@ onMounted(async () => {
                 type="text"
                 class="form-control idp-input"
                 :disabled="!isEditingBranding"
-                placeholder="Tk"
+                placeholder="BDT (৳)"
               />
             </div>
 
@@ -1096,14 +1096,14 @@ onMounted(async () => {
           <div class="p-3 bg-dark border border-secondary rounded mb-3">
             <div class="text-muted small mb-1">Next Generated Invoice No:</div>
             <div class="text-success font-monospace fs-5 fw-bold">
-              {{ form.invoicePrefix }}000{{ form.currentInvoiceSequence }}/2026
+              {{ (form.invoicePrefix || 'INV').replace(/-+$/, '') }}-{{ new Date().getFullYear() }}-{{ String(form.currentInvoiceSequence || 1).padStart(6, '0') }}
             </div>
           </div>
 
           <div class="p-3 bg-dark border border-secondary rounded mb-3">
             <div class="text-muted small mb-1">Next Money Receipt No:</div>
             <div class="text-info font-monospace fs-5 fw-bold">
-              {{ form.receiptPrefix }}000{{ form.currentReceiptSequence }}/2026
+              {{ (form.receiptPrefix || 'RCP').replace(/-+$/, '') }}-{{ new Date().getFullYear() }}-{{ String(form.currentReceiptSequence || 1).padStart(6, '0') }}
             </div>
           </div>
 
