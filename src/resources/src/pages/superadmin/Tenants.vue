@@ -460,41 +460,49 @@ onUnmounted(() => {
 
     <!-- 2. ORGANIZATION TENANTS DIRECTORY -->
     <div class="table-card shadow-sm mb-4">
-      <div class="p-3 border-bottom border-secondary d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3" style="background: #181b1f;">
-        <div class="d-flex flex-wrap align-items-center gap-2">
-          <h6 class="text-white fw-bold mb-0">Organization Tenants</h6>
-          <span class="badge bg-primary px-2.5 py-1">{{ filteredTenants.length }} Found</span>
-          <span v-if="suspendedCount > 0" class="badge bg-danger text-white px-2.5 py-1">
+      <div class="p-3 border-bottom border-secondary border-opacity-50 d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3" style="background: #181b1f;">
+        <div class="d-flex align-items-center gap-2.5">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-buildings text-primary fs-5"></i>
+            <h6 class="text-white fw-bold mb-0">Organization Tenants</h6>
+          </div>
+          <span class="badge bg-primary bg-opacity-25 text-primary border border-primary border-opacity-25 px-2.5 py-1 fw-bold rounded-pill">
+            {{ filteredTenants.length }} Found
+          </span>
+          <span v-if="suspendedCount > 0" class="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-25 px-2.5 py-1 fw-bold rounded-pill">
             {{ suspendedCount }} Suspended
           </span>
         </div>
 
-        <div class="d-flex flex-wrap align-items-center gap-2">
-          <!-- Status Filter Tabs -->
-          <div class="d-flex align-items-center bg-dark p-0.5 rounded border border-secondary">
+        <div class="d-flex align-items-center gap-3 flex-nowrap">
+          <!-- Status Filter Tabs (Modern Segmented Pill Control) -->
+          <div class="d-inline-flex align-items-center p-1 rounded-3" style="background-color: #121417; border: 1px solid #2d3239;">
             <button
               type="button"
-              class="btn btn-sm py-1 px-2.5 rounded text-nowrap"
-              :class="statusFilter === 'all' ? 'btn-primary' : 'text-muted border-0 bg-transparent'"
+              class="btn btn-sm py-1 px-3 rounded-2 text-nowrap fw-semibold transition-all"
+              style="font-size: 0.82rem;"
+              :class="statusFilter === 'all' ? 'btn-primary shadow-sm' : 'text-light border-0 bg-transparent opacity-75'"
               @click="statusFilter = 'all'"
             >
-              All ({{ tenants.length }})
+              All <span class="opacity-75">({{ tenants.length }})</span>
             </button>
             <button
               type="button"
-              class="btn btn-sm py-1 px-2.5 rounded text-nowrap"
-              :class="statusFilter === 'active' ? 'btn-success' : 'text-muted border-0 bg-transparent'"
+              class="btn btn-sm py-1 px-3 rounded-2 text-nowrap fw-semibold transition-all"
+              style="font-size: 0.82rem;"
+              :class="statusFilter === 'active' ? 'btn-success shadow-sm' : 'text-light border-0 bg-transparent opacity-75'"
               @click="statusFilter = 'active'"
             >
-              Active ({{ activeCount }})
+              Active <span class="opacity-75">({{ activeCount }})</span>
             </button>
             <button
               type="button"
-              class="btn btn-sm py-1 px-2.5 rounded text-nowrap"
-              :class="statusFilter === 'suspended' ? 'btn-danger' : 'text-muted border-0 bg-transparent'"
+              class="btn btn-sm py-1 px-3 rounded-2 text-nowrap fw-semibold transition-all"
+              style="font-size: 0.82rem;"
+              :class="statusFilter === 'suspended' ? 'btn-danger shadow-sm' : 'text-light border-0 bg-transparent opacity-75'"
               @click="statusFilter = 'suspended'"
             >
-              Suspended ({{ suspendedCount }})
+              Suspended <span class="opacity-75">({{ suspendedCount }})</span>
             </button>
           </div>
 
@@ -502,8 +510,8 @@ onUnmounted(() => {
           <SearchInput
             v-model="searchTerm"
             placeholder="Search tenant or email..."
-            max-width="260px"
-            min-width="180px"
+            max-width="280px"
+            min-width="200px"
           />
         </div>
       </div>
