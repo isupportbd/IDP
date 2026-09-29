@@ -37,13 +37,6 @@ const route = useRoute();
         <i class="bi bi-geo-alt me-1"></i> Locations & Areas
       </router-link>
       <router-link
-        to="/superadmin/settings/references"
-        class="btn btn-sm"
-        :class="route.path.includes('/references') ? 'btn-primary' : 'btn-dark border-secondary text-muted'"
-      >
-        <i class="bi bi-person-lines-fill me-1"></i> References
-      </router-link>
-      <router-link
         to="/superadmin/settings/mappings"
         class="btn btn-sm"
         :class="route.path.includes('/mappings') ? 'btn-primary' : 'btn-dark border-secondary text-muted'"

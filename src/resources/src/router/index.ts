@@ -234,12 +234,6 @@ export const routes = [
             name: "settings-locations",
             component: () => import("@/pages/superadmin/settings/Locations.vue"),
             meta: { title: "Locations & Areas" }
-          },
-          {
-            path: "references",
-            name: "settings-references",
-            component: () => import("@/pages/superadmin/settings/References.vue"),
-            meta: { title: "References" }
           }
         ]
       },
