@@ -167,9 +167,15 @@ export const useMasterDataStore = defineStore("masterData", () => {
   };
 
   const invalidate = (type?: string) => {
-    if (!type || type === "client-types") loadedCustomerTypes.value = false;
+    if (!type || type === "client-types") {
+      loadedCustomerTypes.value = false;
+      loadedServiceRates.value = false;
+    }
     if (!type || type === "references") loadedReferences.value = false;
-    if (!type || type === "service-items") loadedServiceItems.value = false;
+    if (!type || type === "service-items") {
+      loadedServiceItems.value = false;
+      loadedServiceRates.value = false;
+    }
     if (!type || type === "service-rates") loadedServiceRates.value = false;
     if (!type || type === "service-units") loadedServiceUnits.value = false;
     if (!type || type === "measurement-units") loadedMeasurementUnits.value = false;

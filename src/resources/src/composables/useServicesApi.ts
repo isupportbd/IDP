@@ -27,9 +27,15 @@ export function useServicesApi() {
   const onSettingsUpdated = (payload: any) => {
     const type = payload?.type;
     masterStore.invalidate(type);
-    if (!type || type === "client-types") masterStore.fetchCustomerTypes(true);
+    if (!type || type === "client-types") {
+      masterStore.fetchCustomerTypes(true);
+      masterStore.fetchServiceRates(true);
+    }
     if (!type || type === "references") masterStore.fetchReferences(true);
-    if (!type || type === "service-items") masterStore.fetchServiceItems(true);
+    if (!type || type === "service-items") {
+      masterStore.fetchServiceItems(true);
+      masterStore.fetchServiceRates(true);
+    }
     if (!type || type === "service-rates") masterStore.fetchServiceRates(true);
     if (!type || type === "service-units") masterStore.fetchServiceUnits(true);
   };
@@ -51,6 +57,7 @@ export function useServicesApi() {
   const createCustomerType = async (typeName: string, description?: string) => {
     const res = await axios.post("/api/services/customer-types", { typeName, description });
     await masterStore.fetchCustomerTypes(true);
+    await masterStore.fetchServiceRates(true);
     return res.data;
   };
 
@@ -98,24 +105,28 @@ export function useServicesApi() {
   const createServiceItem = async (itemName: string) => {
     const res = await axios.post("/api/services/items", { itemName });
     await masterStore.fetchServiceItems(true);
+    await masterStore.fetchServiceRates(true);
     return res.data;
   };
 
   const toggleServiceItem = async (id: number) => {
     const res = await axios.patch(`/api/services/items/${id}/toggle`);
     await masterStore.fetchServiceItems(true);
+    await masterStore.fetchServiceRates(true);
     return res.data;
   };
 
   const updateServiceItem = async (id: number, itemName: string) => {
     const res = await axios.patch(`/api/services/items/${id}`, { itemName });
     await masterStore.fetchServiceItems(true);
+    await masterStore.fetchServiceRates(true);
     return res.data;
   };
 
   const deleteServiceItem = async (id: number) => {
     const res = await axios.delete(`/api/services/items/${id}`);
     await masterStore.fetchServiceItems(true);
+    await masterStore.fetchServiceRates(true);
     return res.data;
   };
 

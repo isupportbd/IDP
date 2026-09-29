@@ -9,6 +9,9 @@ import { serviceRates } from "../database/models/service_rates.js";
 function notifySettingsUpdated(settingType: string) {
   try {
     cache.forget(`master:${settingType}`);
+    if (settingType === "service-items" || settingType === "client-types") {
+      cache.forget("master:service-rates");
+    }
     broadcast("global:settings-updated", { type: settingType, timestamp: Date.now() }, { all: true, auth: true });
   } catch (err) {
     console.error(`Failed to broadcast ${settingType} update:`, err);

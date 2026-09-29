@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import axios from "axios";
 import { useAuthStore } from "@/stores/auth";
 import { useFirmApi, type CompanySettings, type BankAccount, type ExpenseHead } from "@/composables/useFirmApi";
@@ -8,6 +8,7 @@ import { useServicesApi, type ServiceItem, type ServiceRate, type ClientReferenc
 import { useToast } from "@/composables/useToast";
 import SearchInput from "@/components/common/SearchInput.vue";
 
+const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const authStore = useAuthStore();
@@ -58,7 +59,38 @@ const {
 // Working form model for Company Profile / Statutory / Invoice Branding
 const form = ref<CompanySettings>({ ...company.value });
 
-const activeTab = ref<"profile" | "invoice" | "bank" | "items" | "rates" | "expenses" | "references" | "rules">("items");
+const validTabs = ["profile", "invoice", "bank", "items", "rates", "expenses", "references", "rules"] as const;
+type TabType = typeof validTabs[number];
+
+const getInitialTab = (): TabType => {
+  const queryTab = route.query.tab as string;
+  if (queryTab && validTabs.includes(queryTab as TabType)) {
+    return queryTab as TabType;
+  }
+  const savedTab = localStorage.getItem("admin_settings_active_tab") as string;
+  if (savedTab && validTabs.includes(savedTab as TabType)) {
+    return savedTab as TabType;
+  }
+  return "profile";
+};
+
+const activeTab = ref<TabType>(getInitialTab());
+
+watch(activeTab, (newTab) => {
+  localStorage.setItem("admin_settings_active_tab", newTab);
+  if (route.query.tab !== newTab) {
+    router.replace({ query: { ...route.query, tab: newTab } });
+  }
+});
+
+watch(
+  () => route.query.tab,
+  (queryTab) => {
+    if (queryTab && validTabs.includes(queryTab as TabType) && activeTab.value !== queryTab) {
+      activeTab.value = queryTab as TabType;
+    }
+  }
+);
 const saveSuccess = ref(false);
 const showResetModal = ref(false);
 
@@ -1132,7 +1164,8 @@ onMounted(async () => {
 
           <button
             type="button"
-            class="btn btn-primary btn-sm px-3 fw-semibold d-flex align-items-center gap-1"
+            class="btn btn-primary btn-sm px-3 fw-semibold d-flex align-items-center gap-1 text-nowrap flex-shrink-0 shadow-sm"
+            style="white-space: nowrap; height: 38px;"
             @click="openAddBankModal"
           >
             <i class="bi bi-plus-lg"></i> <span>Add Bank Account</span>
@@ -1313,7 +1346,7 @@ onMounted(async () => {
             </p>
           </div>
 
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex align-items-center gap-2 flex-nowrap">
             <SearchInput
               v-model="rateSearch"
               placeholder="Search rates..."
@@ -1321,7 +1354,8 @@ onMounted(async () => {
             />
             <button
               type="button"
-              class="btn btn-success btn-sm px-3 fw-semibold d-flex align-items-center gap-1"
+              class="btn btn-success btn-sm px-3 fw-semibold d-flex align-items-center gap-1 text-nowrap flex-shrink-0 shadow-sm"
+              style="white-space: nowrap; height: 38px;"
               @click="openAddRateModal()"
             >
               <i class="bi bi-plus-lg"></i> <span>Add Rate</span>
@@ -1401,7 +1435,7 @@ onMounted(async () => {
             </p>
           </div>
 
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex align-items-center gap-2 flex-nowrap">
             <SearchInput
               v-model="expenseSearch"
               placeholder="Search expense heads..."
@@ -1409,7 +1443,8 @@ onMounted(async () => {
             />
             <button
               type="button"
-              class="btn btn-warning btn-sm px-3 fw-semibold text-dark d-flex align-items-center gap-1"
+              class="btn btn-warning btn-sm px-3 fw-semibold text-dark d-flex align-items-center gap-1 text-nowrap flex-shrink-0 shadow-sm"
+              style="white-space: nowrap; height: 38px;"
               @click="openAddExpenseModal"
             >
               <i class="bi bi-plus-lg"></i> <span>Add Expense Head</span>
@@ -1503,7 +1538,8 @@ onMounted(async () => {
           </div>
           <button
             type="button"
-            class="btn btn-primary btn-sm px-3 fw-semibold d-flex align-items-center gap-1 shadow-sm"
+            class="btn btn-primary btn-sm px-3 fw-semibold d-flex align-items-center gap-1 text-nowrap flex-shrink-0 shadow-sm"
+            style="white-space: nowrap; height: 38px;"
             @click="openAddReferenceModal"
           >
             <i class="bi bi-plus-lg"></i>
