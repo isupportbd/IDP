@@ -2,16 +2,16 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { useToast } from "@/composables/useToast";
 import axios from "axios";
 
 const router = useRouter();
 const authStore = useAuthStore();
+const toast = useToast();
 
 const loginId = ref("");
 const password = ref("");
 const showPassword = ref(false);
-const errorMessage = ref("");
-const successMessage = ref("");
 const isSubmitting = ref(false);
 
 // Platform stats
@@ -45,10 +45,8 @@ const newPassword = ref("");
 const isSendingOtp = ref(false);
 
 const handleLogin = async () => {
-  errorMessage.value = "";
-  successMessage.value = "";
   if (!loginId.value || !password.value) {
-    errorMessage.value = "Please enter both Email and Password.";
+    toast.error("Please enter both Email and Password.");
     return;
   }
   isSubmitting.value = true;
@@ -59,10 +57,11 @@ const handleLogin = async () => {
       remember: true
     });
 
+    toast.success("Signed in successfully!");
     const redirectPath = (router.currentRoute.value.query.redirect as string) || "/";
     router.push(redirectPath);
   } catch (err: any) {
-    errorMessage.value = err?.message || "Invalid email or password. Please check your credentials.";
+    toast.error(err?.message || "Invalid email or password. Please check your credentials.");
   } finally {
     isSubmitting.value = false;
   }
@@ -70,51 +69,58 @@ const handleLogin = async () => {
 
 const handleRequestOtp = async () => {
   if (!resetEmail.value) {
-    errorMessage.value = "Please enter your email.";
+    toast.error("Please enter your registered email address.");
     return;
   }
-  errorMessage.value = "";
   isSendingOtp.value = true;
   try {
     const res = await axios.post("/api/auth/forgot-password-request", {
-      email: resetEmail.value
+      email: resetEmail.value.trim()
     });
     if (res.data?.success) {
-      successMessage.value = "OTP sent to your email!";
+      toast.success(res.data?.message || "OTP sent to your email!");
+      resetOtp.value = "";
+      newPassword.value = "";
       resetStep.value = 2;
     } else {
-      errorMessage.value = res.data?.error || res.data?.message || "Failed to send OTP.";
+      toast.error(res.data?.error || res.data?.message || "Failed to send OTP.");
     }
   } catch (err: any) {
-    errorMessage.value = err?.response?.data?.message || "Error requesting OTP.";
+    toast.error(err?.response?.data?.message || err?.message || "Error requesting OTP.");
   } finally {
     isSendingOtp.value = false;
   }
 };
 
 const handleResetPassword = async () => {
-  if (!resetOtp.value || newPassword.value.length < 6) {
-    errorMessage.value = "Please enter OTP and a password with at least 6 characters.";
+  const otpClean = resetOtp.value.trim();
+  if (!otpClean || otpClean.length < 4) {
+    toast.error("Please enter the 6-digit OTP code received in your email.");
     return;
   }
-  errorMessage.value = "";
+  if (!newPassword.value || newPassword.value.length < 6) {
+    toast.error("Password must be at least 6 characters.");
+    return;
+  }
   isSubmitting.value = true;
   try {
     const res = await axios.post("/api/auth/forgot-password-reset", {
-      email: resetEmail.value,
-      otp: resetOtp.value,
+      email: resetEmail.value.trim(),
+      otp: otpClean,
       newPassword: newPassword.value
     });
     if (res.data?.success) {
-      successMessage.value = "Password reset successfully! Please sign in.";
+      toast.success(res.data?.message || "Password reset successfully! Please sign in.");
       isForgotPassword.value = false;
       resetStep.value = 1;
+      resetOtp.value = "";
+      newPassword.value = "";
       password.value = "";
     } else {
-      errorMessage.value = res.data?.error || res.data?.message || "Invalid OTP or reset failed.";
+      toast.error(res.data?.error || res.data?.message || "Invalid OTP or reset failed.");
     }
   } catch (err: any) {
-    errorMessage.value = err?.response?.data?.message || "Error resetting password.";
+    toast.error(err?.response?.data?.message || err?.message || "Error resetting password.");
   } finally {
     isSubmitting.value = false;
   }
@@ -217,16 +223,6 @@ const handleResetPassword = async () => {
               <p>Sign in to your dashboard</p>
             </div>
 
-            <!-- Alerts -->
-            <div v-if="errorMessage" class="login-alert login-alert-error">
-              <i class="bi bi-exclamation-circle-fill"></i>
-              <span>{{ errorMessage }}</span>
-            </div>
-            <div v-if="successMessage" class="login-alert login-alert-success">
-              <i class="bi bi-check-circle-fill"></i>
-              <span>{{ successMessage }}</span>
-            </div>
-
             <form @submit.prevent="handleLogin" class="login-form">
               <!-- Email Field -->
               <div class="field-group">
@@ -251,7 +247,7 @@ const handleResetPassword = async () => {
                   <a
                     href="javascript:void(0)"
                     class="forgot-link"
-                    @click="isForgotPassword = true; errorMessage = ''; successMessage = '';"
+                    @click="isForgotPassword = true; resetStep = 1; resetOtp = ''; newPassword = '';"
                   >Forgot password?</a>
                 </div>
                 <div class="field-wrap">
@@ -302,16 +298,6 @@ const handleResetPassword = async () => {
               <p>{{ resetStep === 1 ? 'Enter your registered email address' : 'Enter the OTP sent to your email' }}</p>
             </div>
 
-            <!-- Alerts -->
-            <div v-if="errorMessage" class="login-alert login-alert-error">
-              <i class="bi bi-exclamation-circle-fill"></i>
-              <span>{{ errorMessage }}</span>
-            </div>
-            <div v-if="successMessage" class="login-alert login-alert-success">
-              <i class="bi bi-check-circle-fill"></i>
-              <span>{{ successMessage }}</span>
-            </div>
-
             <!-- Step 1: Email -->
             <div v-if="resetStep === 1" class="login-form">
               <div class="field-group">
@@ -323,6 +309,7 @@ const handleResetPassword = async () => {
                     type="email"
                     class="login-input"
                     placeholder="you@example.com"
+                    autocomplete="email"
                     required
                   />
                 </div>
@@ -349,6 +336,11 @@ const handleResetPassword = async () => {
                   class="login-input otp-input"
                   placeholder="——————"
                   maxlength="6"
+                  autocomplete="one-time-code"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  id="reset-otp-field"
+                  name="reset-otp-field"
                   required
                 />
               </div>
@@ -361,6 +353,9 @@ const handleResetPassword = async () => {
                     type="password"
                     class="login-input"
                     placeholder="Minimum 6 characters"
+                    autocomplete="new-password"
+                    id="reset-new-password"
+                    name="reset-new-password"
                     required
                   />
                 </div>
@@ -380,7 +375,7 @@ const handleResetPassword = async () => {
             <button
               type="button"
               class="back-btn"
-              @click="isForgotPassword = false; resetStep = 1; errorMessage = '';"
+              @click="isForgotPassword = false; resetStep = 1; resetOtp = ''; newPassword = '';"
             >
               <i class="bi bi-arrow-left me-1"></i> Back to Sign In
             </button>
