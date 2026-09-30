@@ -311,10 +311,20 @@ export async function getGatewaySettings(c: Context) {
       where: adminId ? eq(companySettings.adminId, adminId) : undefined
     });
 
+    const rawKey = settings?.smsApiKey || "";
+    const isConfigured = Boolean(rawKey && rawKey.trim().length > 0);
+    const maskedApiKey = isConfigured
+      ? rawKey.length > 8
+        ? `${rawKey.slice(0, 4)}••••••••••${rawKey.slice(-4)}`
+        : "••••••••••••"
+      : "";
+
     return c.json({
       success: true,
       data: {
-        smsApiKey: settings?.smsApiKey || "",
+        maskedApiKey,
+        isConfigured,
+        smsApiKey: "", // Never expose raw API key to browser
         smsSenderId: settings?.smsSenderId || "8809617614050",
         provider: "BulkSMSBD",
         endpoint: "http://bulksmsbd.net/api/smsapi"
@@ -337,16 +347,22 @@ export async function updateGatewaySettings(c: Context) {
       where: adminId ? eq(companySettings.adminId, adminId) : undefined
     });
 
+    const trimmedKey = smsApiKey ? smsApiKey.trim() : "";
+    const isUpdatingKey = trimmedKey.length > 0 && !trimmedKey.includes("•");
+
     if (existing) {
-      await db.update(companySettings).set({
-        smsApiKey: smsApiKey ? smsApiKey.trim() : null,
+      const updateData: any = {
         smsSenderId: smsSenderId ? smsSenderId.trim() : "8809617614050",
         updatedAt: new Date()
-      }).where(eq(companySettings.id, existing.id));
+      };
+      if (isUpdatingKey) {
+        updateData.smsApiKey = trimmedKey;
+      }
+      await db.update(companySettings).set(updateData).where(eq(companySettings.id, existing.id));
     } else {
       await db.insert(companySettings).values({
         adminId: adminId ?? null,
-        smsApiKey: smsApiKey ? smsApiKey.trim() : null,
+        smsApiKey: isUpdatingKey ? trimmedKey : null,
         smsSenderId: smsSenderId ? smsSenderId.trim() : "8809617614050",
         companyName: "IDP"
       });

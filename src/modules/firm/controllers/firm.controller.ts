@@ -63,7 +63,22 @@ export const getCompanySettings: Handler = async (c: any) => {
           .returning()
       )[0];
     }
-    return c.json({ message: "Company settings retrieved", data: settings }, HttpStatusCodes.OK);
+    const rawSmsKey = settings.smsApiKey || "";
+    const isSmsConfigured = Boolean(rawSmsKey && rawSmsKey.trim().length > 0);
+    const maskedSmsApiKey = isSmsConfigured
+      ? rawSmsKey.length > 8
+        ? `${rawSmsKey.slice(0, 4)}••••••••••${rawSmsKey.slice(-4)}`
+        : "••••••••••••"
+      : "";
+
+    const sanitizedData = {
+      ...settings,
+      smsApiKey: "", // Never expose raw API key to client
+      maskedSmsApiKey,
+      isSmsConfigured
+    };
+
+    return c.json({ message: "Company settings retrieved", data: sanitizedData }, HttpStatusCodes.OK);
   } catch (err: any) {
     return c.json({ message: err.message || "Failed to fetch company settings" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
@@ -74,6 +89,14 @@ export const updateCompanySettings: Handler = async (c: any) => {
     const body = c.req.valid("json");
     const { tenantAdminId } = await resolveTenantContext(c);
     const targetAdminId = tenantAdminId || 1;
+
+    const rawKey = typeof body.smsApiKey === "string" ? body.smsApiKey.trim() : "";
+    const isUpdatingSmsKey = rawKey.length > 0 && !rawKey.includes("•");
+
+    const payload = { ...body };
+    if (!isUpdatingSmsKey) {
+      delete payload.smsApiKey;
+    }
 
     let existing = (
       await db
@@ -89,7 +112,7 @@ export const updateCompanySettings: Handler = async (c: any) => {
         await db
           .update(companySettings)
           .set({
-            ...body,
+            ...payload,
             adminId: targetAdminId,
             updatedAt: new Date()
           })
@@ -101,17 +124,17 @@ export const updateCompanySettings: Handler = async (c: any) => {
         await db
           .insert(companySettings)
           .values({
-            ...body,
+            ...payload,
             adminId: targetAdminId
           })
           .returning()
       )[0];
     }
 
-    // If SMS API key is saved, sync real-time stock directly from provider
-    if (body.smsApiKey && body.smsApiKey.trim()) {
+    // If SMS API key is updated, sync real-time stock directly from provider
+    if (isUpdatingSmsKey && rawKey) {
       try {
-        const liveBalance = await fetchProviderBalance(body.smsApiKey.trim());
+        const liveBalance = await fetchProviderBalance(rawKey);
         if (liveBalance !== null && targetAdminId) {
           await db.update(users).set({ smsBalance: liveBalance, updatedAt: new Date() }).where(eq(users.id, targetAdminId));
           broadcast(

@@ -29,6 +29,8 @@ export interface CompanySettings {
   allowDuplicateMobile: boolean;
   allowNegativeBalance?: boolean;
   smsApiKey?: string | null;
+  maskedSmsApiKey?: string | null;
+  isSmsConfigured?: boolean;
   smsSenderId?: string | null;
   services?: any[];
   expenseHeads?: any[];

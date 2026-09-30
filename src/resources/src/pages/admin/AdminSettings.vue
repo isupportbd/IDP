@@ -1732,13 +1732,18 @@ onMounted(async () => {
           </div>
 
           <div class="mb-3">
-            <label class="form-label text-light small fw-medium">SMS API Key</label>
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label text-light small fw-medium mb-0">SMS API Key</label>
+              <span v-if="company.isSmsConfigured" class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-25 fs-9">
+                <i class="bi bi-shield-check me-1"></i> Saved: {{ company.maskedSmsApiKey }}
+              </span>
+            </div>
             <input
               v-model="form.smsApiKey"
               type="password"
               class="form-control idp-input"
               :disabled="!isEditingRules"
-              placeholder="Enter your BulkSMSBD API token..."
+              :placeholder="company.isSmsConfigured ? '•••••••••••••••• (Leave blank to keep existing key)' : 'Enter your BulkSMSBD API token...'"
             />
           </div>
 

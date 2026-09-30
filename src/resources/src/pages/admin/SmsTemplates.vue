@@ -76,12 +76,17 @@ const loadLogs = async () => {
   }
 };
 
+const isConfigured = ref(false);
+const maskedApiKey = ref("");
+
 const loadGatewaySettings = async () => {
   try {
     const data = await api.fetchGatewaySettings();
     if (data) {
+      isConfigured.value = Boolean(data.isConfigured);
+      maskedApiKey.value = data.maskedApiKey || "";
       gatewayForm.value = {
-        smsApiKey: data.smsApiKey || "",
+        smsApiKey: "", // Never keep raw secret in frontend model
         smsSenderId: data.smsSenderId || "8809617614050",
         provider: data.provider || "BulkSMSBD",
         endpoint: data.endpoint || "http://bulksmsbd.net/api/smsapi"
@@ -98,6 +103,7 @@ const handleSaveGateway = async () => {
       smsSenderId: gatewayForm.value.smsSenderId
     });
     toast.success(res?.message || "Gateway configuration saved successfully!");
+    await loadGatewaySettings();
   } catch (err: any) {
     toast.error(err?.response?.data?.message || "Failed to save gateway settings");
   } finally {
@@ -106,14 +112,14 @@ const handleSaveGateway = async () => {
 };
 
 const handleCheckBalance = async () => {
-  if (!gatewayForm.value.smsApiKey) {
+  if (!isConfigured.value && !gatewayForm.value.smsApiKey) {
     toast.error("Please enter and save your API Key first.");
     return;
   }
   isCheckingBalance.value = true;
   try {
     const res = await api.checkGatewayBalance();
-    if (res?.balance) {
+    if (res?.balance !== undefined) {
       liveBalance.value = res.balance;
       toast.success(`Current Live Balance: ${res.balance}`);
     }
@@ -622,15 +628,23 @@ const handleSendTestSms = async () => {
 
             <!-- API Key -->
             <div class="mb-4">
-              <label class="form-label fs-8 text-white fw-semibold mb-1">
-                API Key:
-              </label>
+              <div class="d-flex align-items-center justify-content-between mb-1">
+                <label class="form-label fs-8 text-white fw-semibold mb-0">
+                  API Key:
+                </label>
+                <span v-if="isConfigured" class="badge bg-success bg-opacity-25 text-success border border-success border-opacity-25 fs-9">
+                  <i class="bi bi-shield-check me-1"></i>Saved: {{ maskedApiKey }}
+                </span>
+                <span v-else class="badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-25 fs-9">
+                  <i class="bi bi-exclamation-circle me-1"></i>Not Configured
+                </span>
+              </div>
               <div class="input-group">
                 <input
                   :type="showApiKey ? 'text' : 'password'"
                   v-model="gatewayForm.smsApiKey"
                   class="form-control bg-dark text-white border-secondary font-monospace fs-8"
-                  placeholder="Enter BulkSMSBD API Key..."
+                  :placeholder="isConfigured ? '•••••••••••••••• (Leave blank to keep existing key)' : 'Enter BulkSMSBD API Key...'"
                 />
                 <button
                   type="button"
@@ -642,7 +656,7 @@ const handleSendTestSms = async () => {
                 </button>
               </div>
               <span class="fs-9 text-muted mt-1 d-block">
-                Obtain your API Key from your BulkSMSBD dashboard account.
+                For security, the actual API key is masked and never exposed to the browser.
               </span>
             </div>
 

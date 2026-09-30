@@ -35,6 +35,8 @@ export interface SmsLog {
 
 export interface SmsGatewaySettings {
   smsApiKey: string;
+  maskedApiKey?: string;
+  isConfigured?: boolean;
   smsSenderId: string;
   provider: string;
   endpoint: string;
