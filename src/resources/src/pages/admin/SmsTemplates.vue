@@ -338,7 +338,7 @@ const handleSendTestSms = async () => {
           Automated SMS Templates
         </h4>
         <span class="text-muted small">
-          Customize automated Bangla notification SMS for VAT submissions, billing invoices, and payment receipts.
+          Customize automated notification SMS templates for VAT submissions, billing invoices, and receipts.
         </span>
       </div>
 
