@@ -16,9 +16,9 @@ const isSubmitting = ref(false);
 
 // Platform stats
 const platformStats = ref({
-  tenants: "10+",
-  users: "50+",
-  clients: "100+"
+  tenants: "0",
+  users: "0",
+  clients: "0"
 });
 
 const fetchPlatformStats = async () => {

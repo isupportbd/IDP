@@ -91,6 +91,15 @@ const hasAnyAdminTools = computed(() => {
             <h5 class="dash-card-title">Storage Stats</h5>
             <p class="dash-card-desc">Database record volume, disk size, and system health.</p>
           </router-link>
+
+          <!-- SMS Templates -->
+          <router-link to="/superadmin/sms-templates" class="dash-card">
+            <div class="dash-card-icon text-warning">
+              <i class="bi bi-chat-square-text"></i>
+            </div>
+            <h5 class="dash-card-title">SMS Templates</h5>
+            <p class="dash-card-desc">Configure automated SMS bodies, variables, and return submission alerts.</p>
+          </router-link>
         </div>
       </div>
     </template>
@@ -243,6 +252,15 @@ const hasAnyAdminTools = computed(() => {
             </div>
             <h5 class="dash-card-title">Firm Settings</h5>
             <p class="dash-card-desc">Company profile, bank accounts, expenses, and service rates.</p>
+          </router-link>
+
+          <!-- 5. SMS Templates -->
+          <router-link v-if="canAccessModule('settings')" to="/admin/sms-templates" class="dash-card">
+            <div class="dash-card-icon text-warning">
+              <i class="bi bi-chat-square-text"></i>
+            </div>
+            <h5 class="dash-card-title">SMS Templates</h5>
+            <p class="dash-card-desc">Automated SMS templates for VAT returns, invoices, and payment receipts.</p>
           </router-link>
         </div>
       </div>

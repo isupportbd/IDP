@@ -78,6 +78,13 @@ const route = useRoute();
       >
         <i class="bi bi-arrow-left-right me-1"></i> Unit Conversions
       </router-link>
+      <router-link
+        to="/superadmin/sms-templates"
+        class="btn btn-sm"
+        :class="route.path.includes('/sms-templates') ? 'btn-primary' : 'btn-dark border-secondary text-muted'"
+      >
+        <i class="bi bi-chat-square-text me-1"></i> SMS Templates
+      </router-link>
     </div>
 
     <!-- Sub Route View -->

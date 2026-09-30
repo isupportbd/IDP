@@ -7,6 +7,7 @@ import { vatSubmissions } from "@/modules/clients/database/models/vat_submission
 import { customerTypes } from "@/modules/services/database/models/customer_types.js";
 import { clientReferences } from "@/modules/services/database/models/references.js";
 import { users } from "@/modules/auth/database/models/user.js";
+import { sendVatSubmissionSms } from "@/modules/sms-templates/services/sms.service.js";
 
 // ── 1. LIST SUBMISSIONS FOR A TAX PERIOD ──────────────────────────────
 
@@ -222,7 +223,15 @@ export const recordSubmission: Handler = async (c: any) => {
     // Verify active client
     const client = (
       await db
-        .select({ id: clients.id, companyName: clients.companyName, isActive: clients.isActive })
+        .select({
+          id: clients.id,
+          companyName: clients.companyName,
+          mobile: clients.mobile,
+          alternativeMobile: clients.alternativeMobile,
+          binNumber: clients.binNumber,
+          createdBy: clients.createdBy,
+          isActive: clients.isActive
+        })
         .from(clients)
         .where(eq(clients.id, clientId))
         .limit(1)
@@ -297,6 +306,23 @@ export const recordSubmission: Handler = async (c: any) => {
           .returning()
       )[0];
     }
+
+    // Trigger automated SMS in background (non-blocking)
+    const user = c.get("user") || (c.req as any).user;
+    const adminId = client.createdBy || user?.adminId || user?.id || 1;
+
+    sendVatSubmissionSms({
+      clientName: client.companyName,
+      clientMobile: client.mobile,
+      clientAltMobile: client.alternativeMobile,
+      clientBin: client.binNumber,
+      taxPeriod,
+      submissionId: submissionId.trim(),
+      adminId,
+      sentByUserId: user?.id ?? null
+    }).catch((smsErr) => {
+      console.warn("[Submission Auto-SMS Warning]:", smsErr?.message || smsErr);
+    });
 
     return c.json(
       {

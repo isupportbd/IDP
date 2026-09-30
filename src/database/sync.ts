@@ -85,11 +85,49 @@ export async function syncDatabaseSchemaAndSuperAdmin() {
     await executeSingleSql(`ALTER TABLE bank_accounts ADD COLUMN IF NOT EXISTS admin_id INTEGER`);
     await executeSingleSql(`ALTER TABLE expense_heads ADD COLUMN IF NOT EXISTS admin_id INTEGER`);
 
+    // Ensure SMS tables exist
+    await executeSingleSql(`
+      CREATE TABLE IF NOT EXISTS sms_templates (
+        id SERIAL PRIMARY KEY,
+        admin_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        key VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        description TEXT,
+        body TEXT NOT NULL,
+        variables JSONB NOT NULL DEFAULT '[]'::jsonb,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await executeSingleSql(`
+      CREATE TABLE IF NOT EXISTS sms_logs (
+        id SERIAL PRIMARY KEY,
+        admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        recipient_mobile VARCHAR(32) NOT NULL,
+        message TEXT NOT NULL,
+        template_key VARCHAR(64),
+        submission_id VARCHAR(64),
+        status VARCHAR(32) NOT NULL DEFAULT 'SENT',
+        provider_response TEXT,
+        sent_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        sent_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Ensure company_settings has SMS columns
+    await executeSingleSql(`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS sms_api_key VARCHAR(255)`);
+    await executeSingleSql(`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS sender_id VARCHAR(255)`);
+    await executeSingleSql(`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS auto_messaging_enabled BOOLEAN NOT NULL DEFAULT true`);
+
     // Ensure high-performance composite indexes exist
     await executeSingleSql(`CREATE INDEX IF NOT EXISTS purchases_admin_month_idx ON purchases (admin_id, month)`);
     await executeSingleSql(`CREATE INDEX IF NOT EXISTS purchases_client_month_idx ON purchases (client_id, month)`);
     await executeSingleSql(`CREATE INDEX IF NOT EXISTS purchases_client_be_date_idx ON purchases (client_id, be_date)`);
     await executeSingleSql(`CREATE INDEX IF NOT EXISTS sales_rates_lookup_idx ON sales_rates (client_id, item_id, status, activation_date)`);
+    await executeSingleSql(`CREATE INDEX IF NOT EXISTS sms_templates_admin_key_idx ON sms_templates (admin_id, key)`);
+    await executeSingleSql(`CREATE INDEX IF NOT EXISTS sms_logs_admin_date_idx ON sms_logs (admin_id, sent_at)`);
   } catch (rErr) {
     console.warn("[DB Roles Warning]", rErr);
   }

@@ -802,8 +802,16 @@ onMounted(async () => {
             :class="{ active: activeTab === 'rules' }"
             @click="activeTab = 'rules'"
           >
-            <i class="bi bi-sliders me-1"></i> Rules & SMS
+            <i class="bi bi-sliders me-1"></i> Rules & Settings
           </button>
+        </li>
+        <li class="nav-item">
+          <router-link
+            to="/admin/sms-templates"
+            class="nav-link"
+          >
+            <i class="bi bi-chat-square-text me-1"></i> SMS Templates
+          </router-link>
         </li>
       </ul>
     </div>

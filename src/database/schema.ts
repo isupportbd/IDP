@@ -26,3 +26,5 @@ export * from "../modules/superadmin/database/models/plans.js";
 export * from "../modules/superadmin/database/models/subscription_transactions.js";
 export * from "../modules/superadmin/database/models/unit_conversions.js";
 export * from "../modules/superadmin/database/models/vat_notes.js";
+export * from "../modules/sms-templates/database/models/sms_templates.js";
+export * from "../modules/sms-templates/database/models/sms_logs.js";

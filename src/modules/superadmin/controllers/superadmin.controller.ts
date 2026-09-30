@@ -2075,18 +2075,18 @@ export async function getPlatformPublicStats(c: Context) {
     return c.json({
       success: true,
       data: {
-        tenants: tenants > 0 ? `${tenants}+` : "1+",
-        users: totalUsers > 0 ? `${totalUsers}+` : "5+",
-        clients: totalClients > 0 ? `${totalClients}+` : "10+"
+        tenants: tenants > 0 ? `${tenants}+` : "0",
+        users: totalUsers > 0 ? `${totalUsers}+` : "0",
+        clients: totalClients > 0 ? `${totalClients}+` : "0"
       }
     });
   } catch (error: any) {
     return c.json({
       success: true,
       data: {
-        tenants: "10+",
-        users: "50+",
-        clients: "100+"
+        tenants: "0",
+        users: "0",
+        clients: "0"
       }
     });
   }
