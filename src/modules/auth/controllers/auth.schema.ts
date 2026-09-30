@@ -78,15 +78,36 @@ export const ForgotPasswordSchema = z.object({
 export const ResetPasswordSchema = z
   .object({
     email: z.email("Invalid email address"),
-    token: z.string().min(1),
+    token: z.string().optional(),
+    otp: z.string().optional(),
     password: z
       .string()
       .min(6, "Password must be at least 6 characters")
-      .max(100),
-    password_confirmation: z.string()
+      .max(100)
+      .optional(),
+    newPassword: z
+      .string()
+      .min(6, "Password must be at least 6 characters")
+      .max(100)
+      .optional(),
+    password_confirmation: z.string().optional()
   })
   .superRefine((data, ctx) => {
-    if (data.password !== data.password_confirmation) {
+    if (!data.token && !data.otp) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["otp"],
+        message: "Token or OTP is required"
+      });
+    }
+    if (!data.password && !data.newPassword) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["newPassword"],
+        message: "Password is required"
+      });
+    }
+    if (data.password_confirmation && (data.password || data.newPassword) !== data.password_confirmation) {
       ctx.addIssue({
         code: "custom",
         path: ["password_confirmation"],

@@ -13,6 +13,7 @@ import {
   hashResetToken,
   issueTokens,
   makeEmailVerificationToken,
+  makeResetOtp,
   makeResetToken,
   revokeCurrentRefreshToken,
   sanitizeUser
@@ -388,40 +389,52 @@ export const forgotPassword: Handler = async (c: any) => {
     if (!user) return c.json({ message: "If this email exists, a reset link has been sent" }, HttpStatusCodes.OK);
 
     const plainToken = makeResetToken();
+    const plainOtp = makeResetOtp();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
     await db.delete(passwordResetTokens).where(eq(passwordResetTokens.email, user.email));
-    await db.insert(passwordResetTokens).values({
-      email: user.email,
-      token: hashResetToken(plainToken),
-      expiresAt,
-      createdAt: new Date()
-    });
+    await db.insert(passwordResetTokens).values([
+      {
+        email: user.email,
+        token: hashResetToken(plainToken),
+        expiresAt,
+        createdAt: new Date()
+      },
+      {
+        email: user.email,
+        token: hashResetToken(plainOtp),
+        expiresAt,
+        createdAt: new Date()
+      }
+    ]);
 
     const resetUrl = urls.url(`/reset-password?token=${plainToken}&email=${encodeURIComponent(user.email)}`);
     if (redisClientIfReady()) {
-      await dispatchEvent("user:forget-password", { email: user.email, name: user.name, resetUrl }, { queue: "mail" });
+      await dispatchEvent("user:forget-password", { email: user.email, name: user.name, resetUrl, otp: plainOtp }, { queue: "mail" });
     } else {
       await mail.sendMail({
         to: user.email,
         subject: "Reset Your Password - IDP",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;">
-            <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">পাসওয়ার্ড রিসেট অনুরোধ / Password Reset</h2>
+            <h2 style="color: #1e293b; margin-top: 0; font-size: 20px;">পাসওয়ার্ড রিসেট / Password Reset</h2>
             <p style="color: #475569; font-size: 14px; line-height: 1.5;">Hello ${user.name || "User"},</p>
             <p style="color: #475569; font-size: 14px; line-height: 1.5;">
-              We received a request to reset your IDP account password. Click the button below to set a new password:
+              We received a request to reset your IDP account password. Use the 6-digit OTP code below or click the reset button:
             </p>
-            <div style="text-align: center; margin: 28px 0;">
+            <div style="text-align: center; margin: 20px 0;">
+              <div style="font-size: 13px; color: #64748b; margin-bottom: 6px; font-weight: 600;">YOUR 6-DIGIT OTP CODE</div>
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #2563eb; background: #eff6ff; padding: 10px 24px; border-radius: 8px; display: inline-block; border: 1px dashed #bfdbfe;">
+                ${plainOtp}
+              </span>
+            </div>
+            <div style="text-align: center; margin: 20px 0;">
               <a href="${resetUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block; font-size: 14px;">
-                Reset Password
+                Reset Password Link
               </a>
             </div>
             <p style="color: #64748b; font-size: 13px; line-height: 1.4;">
-              This link will expire in <strong>15 minutes</strong>. If the button above doesn't work, copy and paste this link into your browser:
-            </p>
-            <p style="word-break: break-all; font-size: 12px; color: #2563eb;">
-              <a href="${resetUrl}" style="color: #2563eb;">${resetUrl}</a>
+              This OTP / link will expire in <strong>15 minutes</strong>.
             </p>
             <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
             <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">
@@ -433,10 +446,10 @@ export const forgotPassword: Handler = async (c: any) => {
       await dispatchEvent("user.changed", { email: user.email }, { broadcast: { auth: true } });
     }
 
-    return c.json({ message: "If this email exists, a reset link has been sent" }, HttpStatusCodes.OK);
+    return c.json({ success: true, message: "If this email exists, an OTP & reset link has been sent" }, HttpStatusCodes.OK);
   } catch (error) {
     console.error("Forgot password error:", error);
-    return c.json({ message: "Failed to process forgot password request" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json({ success: false, message: "Failed to process forgot password request" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
 };
 
@@ -448,22 +461,25 @@ export const forgotPassword: Handler = async (c: any) => {
 export const resetPassword: Handler = async (c: any) => {
   try {
     const body = c.req.valid("json");
+    const inputToken = (body.token || body.otp || "").toString().trim();
+    const newPass = body.password || body.newPassword;
+
     const record = await db.query.passwordResetTokens.findFirst({
       where: and(
         eq(passwordResetTokens.email, body.email),
-        eq(passwordResetTokens.token, hashResetToken(body.token)),
+        eq(passwordResetTokens.token, hashResetToken(inputToken)),
         gt(passwordResetTokens.expiresAt, new Date())
       )
     });
 
     if (!record) {
-      return c.json({ message: "Invalid or expired reset token" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
+      return c.json({ success: false, message: "Invalid or expired OTP / reset token" }, HttpStatusCodes.UNPROCESSABLE_ENTITY);
     }
 
     await db
       .update(users)
       .set({
-        password: await password.hashPassword(body.password),
+        password: await password.hashPassword(newPass),
         updatedAt: new Date()
       })
       .where(eq(users.email, body.email));
@@ -475,10 +491,10 @@ export const resetPassword: Handler = async (c: any) => {
     });
     if (user) await db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.userId, user.id));
 
-    return c.json({ message: "Password reset successfully" }, HttpStatusCodes.OK);
+    return c.json({ success: true, message: "Password reset successfully! Please sign in." }, HttpStatusCodes.OK);
   } catch (error) {
     console.error("Reset password error:", error);
-    return c.json({ message: "Failed to reset password" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
+    return c.json({ success: false, message: "Failed to reset password" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }
 };
 

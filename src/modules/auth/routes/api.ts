@@ -94,7 +94,20 @@ const forgotPasswordRoute = createRoute({
     body: jsonContent(ForgotPasswordSchema, "Forgot password payload")
   },
   responses: {
-    [HttpStatusCodes.OK]: jsonContent(MessageSchema, "Reset email sent")
+    [HttpStatusCodes.OK]: jsonContent(z.any(), "Reset email sent")
+  }
+});
+
+const forgotPasswordRequestRoute = createRoute({
+  path: "/forgot-password-request",
+  method: "post",
+  tags: ["Auth"],
+  description: "Request forgot password OTP",
+  request: {
+    body: jsonContent(ForgotPasswordSchema, "Forgot password payload")
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.any(), "OTP sent")
   }
 });
 
@@ -107,7 +120,20 @@ const resetPasswordRoute = createRoute({
     body: jsonContent(ResetPasswordSchema, "Reset password payload")
   },
   responses: {
-    [HttpStatusCodes.OK]: jsonContent(MessageSchema, "Password reset")
+    [HttpStatusCodes.OK]: jsonContent(z.any(), "Password reset")
+  }
+});
+
+const forgotPasswordResetRoute = createRoute({
+  path: "/forgot-password-reset",
+  method: "post",
+  tags: ["Auth"],
+  description: "Reset password using OTP",
+  request: {
+    body: jsonContent(ResetPasswordSchema, "Reset password payload")
+  },
+  responses: {
+    [HttpStatusCodes.OK]: jsonContent(z.any(), "Password reset")
   }
 });
 
@@ -206,7 +232,9 @@ const publicRoute = createRouter()
   .api(registerRoute, register)
   .api(loginRoute, login)
   .api(forgotPasswordRoute, forgotPassword)
+  .api(forgotPasswordRequestRoute, forgotPassword)
   .api(resetPasswordRoute, resetPassword)
+  .api(forgotPasswordResetRoute, resetPassword)
   .api(verifyEmailRoute, verifyEmail)
   .api(refreshTokenRoute, refreshToken);
 

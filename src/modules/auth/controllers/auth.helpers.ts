@@ -200,6 +200,10 @@ export function makeResetToken() {
   return randomBytes(32).toString("hex");
 }
 
+export function makeResetOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export function makeEmailVerificationToken() {
   return randomBytes(32).toString("hex");
 }

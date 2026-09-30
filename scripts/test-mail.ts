@@ -1,4 +1,4 @@
-import { mail } from "../src/framework/support/mail.ts";
+import { mail } from "../src/framework/support/mail.js";
 
 const targetEmail = process.argv[2] || "vatmatebd@gmail.com";
 
