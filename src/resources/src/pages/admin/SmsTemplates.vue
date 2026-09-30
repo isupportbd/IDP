@@ -19,7 +19,25 @@ const logs = ref<SmsLog[]>([]);
 const isLoading = ref(true);
 const isSaving = ref<number | null>(null);
 const isResetting = ref<number | null>(null);
-const activeTab = ref<"templates" | "logs">("templates");
+const activeTab = ref<"templates" | "logs" | "gateway">("templates");
+
+// Gateway Setup state
+const gatewayForm = ref({
+  smsApiKey: "",
+  smsSenderId: "8809617614050",
+  provider: "BulkSMSBD",
+  endpoint: "http://bulksmsbd.net/api/smsapi"
+});
+const isSavingGateway = ref(false);
+const isCheckingBalance = ref(false);
+const liveBalance = ref<string | null>(null);
+const showApiKey = ref(false);
+
+// Gateway Quick Test SMS
+const gatewayTestMobile = ref("");
+const gatewayTestMessage = ref("এটি আইডিপি সিস্টেমের বাল্ক এসএমএস গেটওয়ে টেস্ট মেসেজ।");
+const isSendingGatewayTest = ref(false);
+const gatewayTestResponse = ref<{ ok: boolean; message: string; raw?: string } | null>(null);
 
 // Active editing state per template
 const editedBodies = ref<Record<number, string>>({});
@@ -58,14 +76,97 @@ const loadLogs = async () => {
   }
 };
 
+const loadGatewaySettings = async () => {
+  try {
+    const data = await api.fetchGatewaySettings();
+    if (data) {
+      gatewayForm.value = {
+        smsApiKey: data.smsApiKey || "",
+        smsSenderId: data.smsSenderId || "8809617614050",
+        provider: data.provider || "BulkSMSBD",
+        endpoint: data.endpoint || "http://bulksmsbd.net/api/smsapi"
+      };
+    }
+  } catch {}
+};
+
+const handleSaveGateway = async () => {
+  isSavingGateway.value = true;
+  try {
+    const res = await api.updateGatewaySettings({
+      smsApiKey: gatewayForm.value.smsApiKey,
+      smsSenderId: gatewayForm.value.smsSenderId
+    });
+    toast.success(res?.message || "Gateway configuration saved successfully!");
+  } catch (err: any) {
+    toast.error(err?.response?.data?.message || "Failed to save gateway settings");
+  } finally {
+    isSavingGateway.value = false;
+  }
+};
+
+const handleCheckBalance = async () => {
+  if (!gatewayForm.value.smsApiKey) {
+    toast.error("Please enter and save your API Key first.");
+    return;
+  }
+  isCheckingBalance.value = true;
+  try {
+    const res = await api.checkGatewayBalance();
+    if (res?.balance) {
+      liveBalance.value = res.balance;
+      toast.success(`Current Live Balance: ${res.balance}`);
+    }
+  } catch (err: any) {
+    toast.error(err?.response?.data?.message || "Failed to check balance. Check your API key.");
+  } finally {
+    isCheckingBalance.value = false;
+  }
+};
+
+const handleSendGatewayLiveTest = async () => {
+  if (!gatewayTestMobile.value) {
+    toast.error("Please enter a recipient mobile number.");
+    return;
+  }
+  if (!gatewayTestMessage.value) {
+    toast.error("Message body cannot be empty.");
+    return;
+  }
+  isSendingGatewayTest.value = true;
+  gatewayTestResponse.value = null;
+  try {
+    const res = await api.sendTestSms(gatewayTestMobile.value.trim(), gatewayTestMessage.value.trim());
+    gatewayTestResponse.value = {
+      ok: true,
+      message: res?.message || "Test SMS sent successfully!",
+      raw: res?.response
+    };
+    toast.success("Test SMS sent successfully!");
+  } catch (err: any) {
+    const errorMsg = err?.response?.data?.message || "Failed to send test SMS.";
+    gatewayTestResponse.value = {
+      ok: false,
+      message: errorMsg,
+      raw: err?.response?.data?.response
+    };
+    toast.error(errorMsg);
+  } finally {
+    isSendingGatewayTest.value = false;
+  }
+};
+
 onMounted(() => {
   loadData();
+  loadGatewaySettings();
 });
 
-const switchTab = (tab: "templates" | "logs") => {
+const switchTab = (tab: "templates" | "logs" | "gateway") => {
   activeTab.value = tab;
   if (tab === "logs") {
     loadLogs();
+  } else if (tab === "gateway") {
+    loadGatewaySettings();
   }
 };
 
@@ -258,6 +359,14 @@ const handleSendTestSms = async () => {
           @click="switchTab('logs')"
         >
           <i class="bi bi-clock-history me-1"></i> Delivery Logs
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm px-3"
+          :class="activeTab === 'gateway' ? 'btn-primary' : 'btn-dark text-muted'"
+          @click="switchTab('gateway')"
+        >
+          <i class="bi bi-hdd-network me-1"></i> Gateway Setup
         </button>
       </div>
     </div>
@@ -472,6 +581,186 @@ const handleSendTestSms = async () => {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: GATEWAY SETUP -->
+    <div v-else-if="activeTab === 'gateway'" class="row g-4">
+      <!-- Left Column: Gateway Configuration -->
+      <div class="col-12 col-lg-7">
+        <div class="card bg-dark border-secondary h-100">
+          <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center py-3">
+            <h6 class="text-white fw-bold mb-0 d-flex align-items-center gap-2">
+              <i class="bi bi-hdd-network text-primary"></i> SMS Gateway Configuration
+            </h6>
+            <span class="badge bg-primary text-white">
+              BulkSMSBD Provider
+            </span>
+          </div>
+
+          <div class="card-body p-4">
+            <!-- Provider Info -->
+            <div class="row g-3 mb-4">
+              <div class="col-sm-6">
+                <label class="form-label fs-8 text-muted fw-semibold">SMS Provider:</label>
+                <div class="form-control bg-dark text-white border-secondary fs-8 d-flex align-items-center justify-content-between">
+                  <span>BulkSMSBD.net</span>
+                  <span class="badge bg-success">Default</span>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label fs-8 text-muted fw-semibold">API Endpoint URL:</label>
+                <input
+                  type="text"
+                  class="form-control bg-dark text-white border-secondary fs-8 font-monospace"
+                  :value="gatewayForm.endpoint"
+                  readonly
+                />
+              </div>
+            </div>
+
+            <!-- API Key -->
+            <div class="mb-4">
+              <label class="form-label fs-8 text-white fw-semibold mb-1">
+                API Key:
+              </label>
+              <div class="input-group">
+                <input
+                  :type="showApiKey ? 'text' : 'password'"
+                  v-model="gatewayForm.smsApiKey"
+                  class="form-control bg-dark text-white border-secondary font-monospace fs-8"
+                  placeholder="Enter BulkSMSBD API Key..."
+                />
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary"
+                  @click="showApiKey = !showApiKey"
+                  :title="showApiKey ? 'Hide Key' : 'Show Key'"
+                >
+                  <i class="bi" :class="showApiKey ? 'bi-eye-slash' : 'bi-eye'"></i>
+                </button>
+              </div>
+              <span class="fs-9 text-muted mt-1 d-block">
+                Obtain your API Key from your BulkSMSBD dashboard account.
+              </span>
+            </div>
+
+            <!-- Sender ID -->
+            <div class="mb-4">
+              <label class="form-label fs-8 text-white fw-semibold mb-1">
+                Sender ID / Masking:
+              </label>
+              <input
+                type="text"
+                v-model="gatewayForm.smsSenderId"
+                class="form-control bg-dark text-white border-secondary font-monospace fs-8"
+                placeholder="e.g. 8809617614050 or Approved Brand Name"
+              />
+              <span class="fs-9 text-muted mt-1 d-block">
+                Registered non-masking number (e.g. 8809617614050) or approved Brand Sender ID.
+              </span>
+            </div>
+
+            <!-- Live Balance Box -->
+            <div class="p-3 rounded border border-secondary bg-dark d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+              <div>
+                <span class="fs-8 text-muted d-block fw-semibold">ACCOUNT SMS BALANCE:</span>
+                <span class="fs-5 fw-bold text-success font-monospace">
+                  {{ liveBalance || '0.00' }}
+                </span>
+              </div>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-info"
+                @click="handleCheckBalance"
+                :disabled="isCheckingBalance"
+              >
+                <i class="bi bi-wallet2 me-1"></i>
+                <span v-if="isCheckingBalance">Checking...</span>
+                <span v-else>Check Live Balance</span>
+              </button>
+            </div>
+
+            <!-- Save Button -->
+            <div class="d-flex justify-content-end">
+              <button
+                type="button"
+                class="btn btn-primary px-4"
+                @click="handleSaveGateway"
+                :disabled="isSavingGateway"
+              >
+                <i class="bi bi-check-lg me-1"></i>
+                <span v-if="isSavingGateway">Saving...</span>
+                <span v-else>Save Configuration</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Direct Live SMS Test -->
+      <div class="col-12 col-lg-5">
+        <div class="card bg-dark border-secondary h-100">
+          <div class="card-header bg-dark border-secondary py-3">
+            <h6 class="text-white fw-bold mb-0 d-flex align-items-center gap-2">
+              <i class="bi bi-send text-warning"></i> Instant Gateway Test
+            </h6>
+          </div>
+
+          <div class="card-body p-4">
+            <div class="mb-3">
+              <label class="form-label fs-8 text-muted fw-semibold">Recipient Mobile Number:</label>
+              <input
+                v-model="gatewayTestMobile"
+                type="text"
+                class="form-control bg-dark text-white border-secondary fs-8 font-monospace"
+                placeholder="017XXXXXXXX"
+              />
+              <span class="fs-9 text-muted mt-1 d-block">11-digit Bangladeshi mobile number.</span>
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <label class="form-label fs-8 text-muted fw-semibold mb-0">Test Message Content:</label>
+                <span class="badge bg-dark border border-secondary text-muted fs-9">
+                  {{ getSmsPartCount(gatewayTestMessage).chars }} chars
+                </span>
+              </div>
+              <textarea
+                v-model="gatewayTestMessage"
+                class="form-control bg-dark text-white border-secondary font-monospace fs-8"
+                rows="4"
+              ></textarea>
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-warning w-100 py-2 fw-semibold mb-3"
+              @click="handleSendGatewayLiveTest"
+              :disabled="isSendingGatewayTest"
+            >
+              <i class="bi bi-send-fill me-1"></i>
+              <span v-if="isSendingGatewayTest">Sending SMS...</span>
+              <span v-else>Send Test SMS</span>
+            </button>
+
+            <!-- Test Result Console -->
+            <div
+              v-if="gatewayTestResponse"
+              class="alert mb-0 fs-8"
+              :class="gatewayTestResponse.ok ? 'alert-success bg-dark border-success text-success' : 'alert-danger bg-dark border-danger text-danger'"
+            >
+              <div class="fw-bold d-flex align-items-center gap-2 mb-1">
+                <i class="bi" :class="gatewayTestResponse.ok ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'"></i>
+                {{ gatewayTestResponse.ok ? 'SMS Sent Successfully' : 'SMS Delivery Failed' }}
+              </div>
+              <div class="small font-monospace">{{ gatewayTestResponse.message }}</div>
+              <div v-if="gatewayTestResponse.raw" class="small text-muted font-monospace mt-1">
+                Response: {{ gatewayTestResponse.raw }}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

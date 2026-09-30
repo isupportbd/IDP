@@ -5,7 +5,10 @@ import {
   updateTemplate,
   resetTemplate,
   sendTestSms,
-  listSmsLogs
+  listSmsLogs,
+  getGatewaySettings,
+  updateGatewaySettings,
+  checkGatewayBalance
 } from "../controllers/sms-templates.controller.js";
 
 const smsTemplatesRouter = createRouter();
@@ -13,6 +16,9 @@ const smsTemplatesRouter = createRouter();
 // Apply auth middleware to all SMS routes
 smsTemplatesRouter.use("*", authMiddleware);
 
+smsTemplatesRouter.get("/gateway", getGatewaySettings);
+smsTemplatesRouter.put("/gateway", updateGatewaySettings);
+smsTemplatesRouter.get("/gateway/balance", checkGatewayBalance);
 smsTemplatesRouter.get("/", listTemplates);
 smsTemplatesRouter.get("/logs", listSmsLogs);
 smsTemplatesRouter.put("/:id", updateTemplate);

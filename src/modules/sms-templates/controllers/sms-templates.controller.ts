@@ -300,3 +300,114 @@ export async function listSmsLogs(c: Context) {
     return c.json({ success: false, message: error?.message || "Failed to fetch SMS logs" }, 500);
   }
 }
+
+// 6. Get Gateway Settings
+export async function getGatewaySettings(c: Context) {
+  try {
+    const user = getAuthUser(c);
+    const adminId = resolveTenantAdminId(user);
+
+    const settings = await db.query.companySettings.findFirst({
+      where: adminId ? eq(companySettings.adminId, adminId) : undefined
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        smsApiKey: settings?.smsApiKey || "",
+        smsSenderId: settings?.smsSenderId || "8809617614050",
+        provider: "BulkSMSBD",
+        endpoint: "http://bulksmsbd.net/api/smsapi"
+      }
+    });
+  } catch (error: any) {
+    return c.json({ success: false, message: error?.message || "Failed to fetch gateway settings" }, 500);
+  }
+}
+
+// 7. Update Gateway Settings
+export async function updateGatewaySettings(c: Context) {
+  try {
+    const user = getAuthUser(c);
+    const adminId = resolveTenantAdminId(user);
+    const body = await c.req.json();
+    const { smsApiKey, smsSenderId } = body;
+
+    const existing = await db.query.companySettings.findFirst({
+      where: adminId ? eq(companySettings.adminId, adminId) : undefined
+    });
+
+    if (existing) {
+      await db.update(companySettings).set({
+        smsApiKey: smsApiKey ? smsApiKey.trim() : null,
+        smsSenderId: smsSenderId ? smsSenderId.trim() : "8809617614050",
+        updatedAt: new Date()
+      }).where(eq(companySettings.id, existing.id));
+    } else {
+      await db.insert(companySettings).values({
+        adminId: adminId ?? null,
+        smsApiKey: smsApiKey ? smsApiKey.trim() : null,
+        smsSenderId: smsSenderId ? smsSenderId.trim() : "8809617614050",
+        companyName: "IDP"
+      });
+    }
+
+    return c.json({
+      success: true,
+      message: "Gateway settings updated successfully!"
+    });
+  } catch (error: any) {
+    return c.json({ success: false, message: error?.message || "Failed to update gateway settings" }, 500);
+  }
+}
+
+// 8. Check Gateway Balance
+export async function checkGatewayBalance(c: Context) {
+  try {
+    const user = getAuthUser(c);
+    const adminId = resolveTenantAdminId(user);
+
+    const settings = await db.query.companySettings.findFirst({
+      where: adminId ? eq(companySettings.adminId, adminId) : undefined
+    });
+
+    const apiKey = settings?.smsApiKey?.trim();
+    if (!apiKey) {
+      return c.json({
+        success: false,
+        message: "SMS API Key is not configured yet. Please enter and save your API Key first."
+      }, 400);
+    }
+
+    const res = await fetch(`http://bulksmsbd.net/api/getBalanceApi?api_key=${apiKey}`, { method: "GET" });
+    const text = await res.text();
+    let balance = "0.00";
+
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed?.balance !== undefined && parsed?.balance !== null) {
+        // Only return the numeric balance string (e.g. "150.00")
+        balance = String(parsed.balance).replace(/[^0-9.]/g, "");
+      } else if (parsed?.response_code && parsed.response_code !== 202) {
+        return c.json({
+          success: false,
+          message: parsed?.error_message || `API returned code ${parsed.response_code}`
+        }, 400);
+      }
+    } catch {
+      // If response is plain text number
+      const cleanNum = text.replace(/<[^>]*>?/gm, "").trim();
+      const match = cleanNum.match(/([0-9]+(\.[0-9]+)?)/);
+      if (match && match[1]) {
+        balance = match[1];
+      }
+    }
+
+    return c.json({
+      success: true,
+      balance
+    });
+  } catch (error: any) {
+    return c.json({ success: false, message: error?.message || "Failed to check balance" }, 500);
+  }
+}

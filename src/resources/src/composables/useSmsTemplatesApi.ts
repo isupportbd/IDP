@@ -33,6 +33,13 @@ export interface SmsLog {
   sentAt: string;
 }
 
+export interface SmsGatewaySettings {
+  smsApiKey: string;
+  smsSenderId: string;
+  provider: string;
+  endpoint: string;
+}
+
 export function useSmsTemplatesApi() {
   const fetchTemplates = async () => {
     const res = await axios.get("/api/sms-templates");
@@ -59,11 +66,29 @@ export function useSmsTemplatesApi() {
     return res.data?.data as SmsLog[];
   };
 
+  const fetchGatewaySettings = async () => {
+    const res = await axios.get("/api/sms-templates/gateway");
+    return res.data?.data as SmsGatewaySettings;
+  };
+
+  const updateGatewaySettings = async (payload: { smsApiKey: string; smsSenderId: string }) => {
+    const res = await axios.put("/api/sms-templates/gateway", payload);
+    return res.data;
+  };
+
+  const checkGatewayBalance = async () => {
+    const res = await axios.get("/api/sms-templates/gateway/balance");
+    return res.data as { success: boolean; balance: string };
+  };
+
   return {
     fetchTemplates,
     updateTemplate,
     resetTemplate,
     sendTestSms,
-    fetchSmsLogs
+    fetchSmsLogs,
+    fetchGatewaySettings,
+    updateGatewaySettings,
+    checkGatewayBalance
   };
 }
