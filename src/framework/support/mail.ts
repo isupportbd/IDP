@@ -30,9 +30,25 @@ export const mail = {
    */
   async sendMail(payload: MailPayload) {
     try {
+      const textFallback =
+        payload.text ||
+        (payload.html
+          ? payload.html
+              .replace(/<style[^>]*>.*?<\/style>/gi, "")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+          : undefined);
+
       return await transport.sendMail({
         from: mailConfig.fromAddress,
-        ...payload
+        ...payload,
+        text: textFallback,
+        headers: {
+          "X-Entity-Ref-ID": `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+          "X-Auto-Response-Suppress": "OOF, AutoReply",
+          Auto_Submitted: "auto-generated"
+        }
       });
     } catch (error) {
       logger.error("Mail send failed", {
