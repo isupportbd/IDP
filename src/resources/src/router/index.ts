@@ -147,12 +147,6 @@ export const routes = [
         component: () => import("@/pages/admin/UserForm.vue"),
         meta: { title: "Edit Sub-User" }
       },
-      {
-        path: "admin/sms-templates",
-        name: "admin-sms-templates",
-        component: () => import("@/pages/admin/SmsTemplates.vue"),
-        meta: { title: "SMS Templates" }
-      },
 
       // SuperAdmin features
       {
@@ -323,8 +317,7 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
     "/admin/sales-rates": "sales_rates",
     "/admin/reports": "reports",
     "/admin/billing": "billing",
-    "/admin/settings": "settings",
-    "/admin/sms-templates": "settings"
+    "/admin/settings": "settings"
   };
 
   for (const [prefix, moduleId] of Object.entries(modulePathMap)) {

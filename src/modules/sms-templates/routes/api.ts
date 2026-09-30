@@ -1,3 +1,4 @@
+import type { Context, Next } from "hono";
 import { createRouter } from "@/framework/facade.js";
 import { authMiddleware } from "@/middlewares/auth-middleware.js";
 import {
@@ -13,8 +14,17 @@ import {
 
 const smsTemplatesRouter = createRouter();
 
-// Apply auth middleware to all SMS routes
-smsTemplatesRouter.use("*", authMiddleware);
+async function superAdminOnlyMiddleware(c: Context, next: Next) {
+  const auth = c.get("auth") || c.get("user") || (c.req as any).user;
+  const roleName = typeof auth?.role === "string" ? auth.role : auth?.role?.name;
+  if (roleName !== "superadmin") {
+    return c.json({ success: false, message: "Forbidden: Super Admin access only" }, 403);
+  }
+  return await next();
+}
+
+// Apply auth middleware and superadmin guard to all SMS routes
+smsTemplatesRouter.use("*", authMiddleware, superAdminOnlyMiddleware);
 
 smsTemplatesRouter.get("/gateway", getGatewaySettings);
 smsTemplatesRouter.put("/gateway", updateGatewaySettings);
