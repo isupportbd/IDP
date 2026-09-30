@@ -8,7 +8,7 @@ export const urls = {
    * How: Trims trailing slash from the configured app URL.
    */
   appUrl() {
-    return appConfig.url.replace(/\/$/, "");
+    return (appConfig.frontendUrl || appConfig.url).replace(/\/$/, "");
   },
 
   /**

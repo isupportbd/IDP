@@ -9,11 +9,16 @@ type MailPayload = {
   text?: string;
 };
 
+const isSecure = mailConfig.encryption === "ssl" || Number(mailConfig.port) === 465;
+
 const transport = nodemailer.createTransport({
   host: mailConfig.host,
-  port: mailConfig.port,
-  secure: mailConfig.encryption === "ssl",
-  auth: mailConfig.username ? { user: mailConfig.username, pass: mailConfig.password } : undefined
+  port: Number(mailConfig.port),
+  secure: isSecure,
+  auth: mailConfig.username ? { user: mailConfig.username, pass: mailConfig.password } : undefined,
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
 export const mail = {

@@ -39,8 +39,13 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value?.trim() || undefined),
+    MAIL_HOST: z.string().default("127.0.0.1"),
+    MAIL_PORT: z.coerce.number().default(1089),
+    MAIL_ENCRYPTION: z.enum(["none", "ssl", "tls"]).default("none"),
     MAIL_USERNAME: z.string().default(""),
     MAIL_PASSWORD: z.string().default(""),
+    MAIL_FROM_ADDRESS: z.string().default("no-reply@example.com"),
+    MAIL_FROM_NAME: z.string().default("IDP"),
     SUPERADMIN_EMAIL: z
       .string()
       .optional()
