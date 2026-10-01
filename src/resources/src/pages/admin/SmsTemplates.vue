@@ -77,6 +77,7 @@ const loadLogs = async () => {
 };
 
 const isConfigured = ref(false);
+const isEditingGateway = ref(false);
 const maskedApiKey = ref("");
 
 const loadGatewaySettings = async () => {
@@ -85,6 +86,9 @@ const loadGatewaySettings = async () => {
     if (data) {
       isConfigured.value = Boolean(data.isConfigured);
       maskedApiKey.value = data.maskedApiKey || "";
+      if (!isConfigured.value) {
+        isEditingGateway.value = true;
+      }
       gatewayForm.value = {
         smsApiKey: "", // Never keep raw secret in frontend model
         smsSenderId: data.smsSenderId || "8809617614050",
@@ -95,6 +99,11 @@ const loadGatewaySettings = async () => {
   } catch {}
 };
 
+const cancelGatewayEdit = async () => {
+  isEditingGateway.value = false;
+  await loadGatewaySettings();
+};
+
 const handleSaveGateway = async () => {
   isSavingGateway.value = true;
   try {
@@ -103,6 +112,7 @@ const handleSaveGateway = async () => {
       smsSenderId: gatewayForm.value.smsSenderId
     });
     toast.success(res?.message || "Gateway configuration saved successfully!");
+    isEditingGateway.value = false;
     await loadGatewaySettings();
   } catch (err: any) {
     toast.error(err?.response?.data?.message || "Failed to save gateway settings");
@@ -600,9 +610,17 @@ const handleSendTestSms = async () => {
             <h6 class="text-white fw-bold mb-0 d-flex align-items-center gap-2">
               <i class="bi bi-hdd-network text-primary"></i> SMS Gateway Configuration
             </h6>
-            <span class="badge bg-primary text-white">
-              BulkSMSBD Provider
-            </span>
+            <div class="d-flex align-items-center gap-2">
+              <span v-if="!isEditingGateway" class="badge bg-secondary bg-opacity-25 text-secondary border border-secondary border-opacity-25 font-monospace">
+                <i class="bi bi-lock-fill me-1"></i> Locked
+              </span>
+              <span v-else class="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25 font-monospace">
+                <i class="bi bi-pencil-fill me-1"></i> Editing
+              </span>
+              <span class="badge bg-primary text-white">
+                BulkSMSBD Provider
+              </span>
+            </div>
           </div>
 
           <div class="card-body p-4">
@@ -644,12 +662,14 @@ const handleSendTestSms = async () => {
                   :type="showApiKey ? 'text' : 'password'"
                   v-model="gatewayForm.smsApiKey"
                   class="form-control bg-dark text-white border-secondary font-monospace fs-8"
+                  :disabled="!isEditingGateway"
                   :placeholder="isConfigured ? '•••••••••••••••• (Leave blank to keep existing key)' : 'Enter BulkSMSBD API Key...'"
                 />
                 <button
                   type="button"
                   class="btn btn-outline-secondary"
                   @click="showApiKey = !showApiKey"
+                  :disabled="!isEditingGateway"
                   :title="showApiKey ? 'Hide Key' : 'Show Key'"
                 >
                   <i class="bi" :class="showApiKey ? 'bi-eye-slash' : 'bi-eye'"></i>
@@ -669,6 +689,7 @@ const handleSendTestSms = async () => {
                 type="text"
                 v-model="gatewayForm.smsSenderId"
                 class="form-control bg-dark text-white border-secondary font-monospace fs-8"
+                :disabled="!isEditingGateway"
                 placeholder="e.g. 8809617614050 or Approved Brand Name"
               />
               <span class="fs-9 text-muted mt-1 d-block">
@@ -696,18 +717,37 @@ const handleSendTestSms = async () => {
               </button>
             </div>
 
-            <!-- Save Button -->
-            <div class="d-flex justify-content-end">
+            <!-- Action Buttons: Edit & Save -->
+            <div class="d-flex justify-content-end gap-2 pt-3 border-top border-secondary border-opacity-50">
               <button
+                v-if="!isEditingGateway"
                 type="button"
-                class="btn btn-primary px-4"
-                @click="handleSaveGateway"
-                :disabled="isSavingGateway"
+                class="btn btn-warning px-4 fw-semibold text-dark shadow-sm"
+                @click="isEditingGateway = true"
               >
-                <i class="bi bi-check-lg me-1"></i>
-                <span v-if="isSavingGateway">Saving...</span>
-                <span v-else>Save Configuration</span>
+                <i class="bi bi-pencil-square me-1"></i> Edit Configuration
               </button>
+              <template v-else>
+                <button
+                  v-if="isConfigured"
+                  type="button"
+                  class="btn btn-outline-secondary px-3"
+                  @click="cancelGatewayEdit"
+                  :disabled="isSavingGateway"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-primary px-4 shadow-sm"
+                  @click="handleSaveGateway"
+                  :disabled="isSavingGateway"
+                >
+                  <i class="bi bi-check-lg me-1"></i>
+                  <span v-if="isSavingGateway">Saving...</span>
+                  <span v-else>Save Configuration</span>
+                </button>
+              </template>
             </div>
           </div>
         </div>
