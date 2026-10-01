@@ -1,4 +1,4 @@
-import { and, eq, gt, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import { authConfig, jwtConfig } from "@/config/index.js";
 import { broadcast, cookie, db, dispatchEvent, HttpStatusCodes, jwt, mail, password, urls } from "@/framework/facade.js";
@@ -936,7 +936,13 @@ export const sendTestSms: Handler = async (c: any) => {
     }
 
     const body = await c.req.json().catch(() => ({}));
-    const firmSetting = (await db.select().from(companySettings).limit(1))[0];
+    const firmSetting = (
+      await db
+        .select()
+        .from(companySettings)
+        .where(eq(companySettings.adminId, targetAdminId))
+        .limit(1)
+    )[0] || (await db.select().from(companySettings).where(isNull(companySettings.adminId)).limit(1))[0];
     const mobile = body?.mobile || adminUser.mobile || "01819234567";
     const apiKey = body?.apiKey || (adminUser as any).smsApiKey || firmSetting?.smsApiKey;
     const senderId = body?.senderId || (adminUser as any).smsSenderId || firmSetting?.smsSenderId || "VAT-IDP";

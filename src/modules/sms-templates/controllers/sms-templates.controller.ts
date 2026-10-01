@@ -242,20 +242,22 @@ export async function sendTestSms(c: Context) {
     }
 
     const adminId = resolveTenantAdminId(user);
-    const settings = await db.query.companySettings.findFirst({
-      where: adminId ? eq(companySettings.adminId, adminId) : undefined
-    });
+    const settings = (await db.query.companySettings.findFirst({
+      where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
+    })) || (await db.query.companySettings.findFirst({
+      where: isNull(companySettings.adminId)
+    }));
 
-    if (!settings?.smsApiKey || !settings?.senderId) {
+    if (!settings?.smsApiKey || !settings?.smsSenderId) {
       return c.json({
         success: false,
-        message: "SMS Gateway API Key or Sender ID is missing in Firm Settings. Please configure them first."
+        message: "SMS Gateway API Key or Sender ID is missing in Gateway Settings. Please configure them first."
       }, 400);
     }
 
     const result = await callBulkSmsBd({
       apiKey: settings.smsApiKey,
-      senderId: settings.senderId,
+      senderId: settings.smsSenderId,
       number: recipient,
       message: message.trim()
     });
@@ -308,7 +310,7 @@ export async function getGatewaySettings(c: Context) {
     const adminId = resolveTenantAdminId(user);
 
     const settings = await db.query.companySettings.findFirst({
-      where: adminId ? eq(companySettings.adminId, adminId) : undefined
+      where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
     });
 
     const rawKey = settings?.smsApiKey || "";
@@ -344,7 +346,7 @@ export async function updateGatewaySettings(c: Context) {
     const { smsApiKey, smsSenderId } = body;
 
     const existing = await db.query.companySettings.findFirst({
-      where: adminId ? eq(companySettings.adminId, adminId) : undefined
+      where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
     });
 
     const trimmedKey = smsApiKey ? smsApiKey.trim() : "";
@@ -383,9 +385,11 @@ export async function checkGatewayBalance(c: Context) {
     const user = getAuthUser(c);
     const adminId = resolveTenantAdminId(user);
 
-    const settings = await db.query.companySettings.findFirst({
-      where: adminId ? eq(companySettings.adminId, adminId) : undefined
-    });
+    const settings = (await db.query.companySettings.findFirst({
+      where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
+    })) || (await db.query.companySettings.findFirst({
+      where: isNull(companySettings.adminId)
+    }));
 
     const apiKey = settings?.smsApiKey?.trim();
     if (!apiKey) {

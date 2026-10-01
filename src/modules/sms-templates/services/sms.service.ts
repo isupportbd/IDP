@@ -205,12 +205,20 @@ export async function sendVatSubmissionSms(params: {
     });
     if (settings) {
       smsApiKey = settings.smsApiKey || "";
-      senderId = settings.senderId || "";
+      senderId = settings.smsSenderId || "";
       companyName = settings.companyName || companyName;
-      if (typeof settings.autoMessagingEnabled === "boolean") {
-        autoMessagingEnabled = settings.autoMessagingEnabled;
+    }
+    // Fallback to global superadmin gateway settings if tenant hasn't configured custom key
+    if (!smsApiKey) {
+      const globalSettings = await db.query.companySettings.findFirst({
+        where: isNull(companySettings.adminId)
+      });
+      if (globalSettings?.smsApiKey) {
+        smsApiKey = globalSettings.smsApiKey;
+        if (!senderId) senderId = globalSettings.smsSenderId || "VAT-IDP";
       }
     }
+    if (!senderId) senderId = "VAT-IDP";
   } catch {}
 
   const senderRole = await resolveSenderRoleLabel(params.sentByUserId);
