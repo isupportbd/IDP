@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, text, timestamp, index } from "drizzle-orm/pg-core";
 import { users } from "@/modules/auth/database/models/user.js";
 
 export const smsLogs = pgTable("sms_logs", {
@@ -12,4 +12,8 @@ export const smsLogs = pgTable("sms_logs", {
   providerResponse: text("provider_response"),
   sentBy: integer("sent_by").references(() => users.id, { onDelete: "set null" }),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow()
-});
+}, (table) => ({
+  adminIdIdx: index("sms_logs_admin_id_idx").on(table.adminId),
+  sentAtIdx: index("sms_logs_sent_at_idx").on(table.sentAt),
+  statusIdx: index("sms_logs_status_idx").on(table.status)
+}));

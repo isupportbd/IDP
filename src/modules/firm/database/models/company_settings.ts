@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, serial, text, timestamp, varchar, index } from "drizzle-orm/pg-core";
 import { users } from "@/modules/auth/database/models/user.js";
 
 export const companySettings = pgTable("company_settings", {
@@ -23,5 +23,7 @@ export const companySettings = pgTable("company_settings", {
   smsSenderId: varchar("sms_sender_id", { length: 50 }).default("VAT-IDP"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
-});
+}, (table) => ({
+  adminIdIdx: index("company_settings_admin_id_idx").on(table.adminId)
+}));
 

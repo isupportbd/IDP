@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, text, jsonb, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, text, jsonb, boolean, timestamp, index } from "drizzle-orm/pg-core";
 import { users } from "@/modules/auth/database/models/user.js";
 
 export interface SmsTemplateVariable {
@@ -19,4 +19,7 @@ export const smsTemplates = pgTable("sms_templates", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-});
+}, (table) => ({
+  adminKeyIdx: index("sms_templates_admin_key_idx").on(table.adminId, table.key),
+  keyIdx: index("sms_templates_key_idx").on(table.key)
+}));
