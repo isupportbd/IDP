@@ -96,8 +96,9 @@ export const getCompanySettings: Handler = async (c: any) => {
 export const updateCompanySettings: Handler = async (c: any) => {
   try {
     const body = c.req.valid("json");
-    const { tenantAdminId } = await resolveTenantContext(c);
-    const targetAdminId = tenantAdminId || 1;
+    const { isSuperAdmin, tenantAdminId } = await resolveTenantContext(c);
+    // Bug fix: superadmin targetAdminId must be null, not 1
+    const targetAdminId = tenantAdminId || (isSuperAdmin ? null : 1);
 
     const rawKey = typeof body.smsApiKey === "string" ? body.smsApiKey.trim() : "";
     const isUpdatingSmsKey = rawKey.length > 0 && !rawKey.includes("•");
@@ -161,7 +162,27 @@ export const updateCompanySettings: Handler = async (c: any) => {
       }
     }
 
-    return c.json({ message: "Company settings updated successfully", data: result }, HttpStatusCodes.OK);
+    // Return the same sanitized format as getCompanySettings so frontend
+    // company.value stays consistent (maskedSmsApiKey, isSmsConfigured, etc.)
+    const rawSmsKey = result.smsApiKey || "";
+    const isSmsConfigured = Boolean(rawSmsKey && rawSmsKey.trim().length > 0);
+    const maskedSmsApiKey = isSmsConfigured
+      ? rawSmsKey.length > 8
+        ? `${rawSmsKey.slice(0, 4)}••••••••••${rawSmsKey.slice(-4)}`
+        : "••••••••••••"
+      : "";
+
+    const sanitizedResult = {
+      ...result,
+      smsApiKey: "",           // Never expose raw API key to browser
+      maskedSmsApiKey,
+      isSmsConfigured,
+      smsSenderId: result.smsSenderId || "",
+      smsProvider: result.smsProvider || "",
+      smsEndpointUrl: result.smsEndpointUrl || ""
+    };
+
+    return c.json({ message: "Company settings updated successfully", data: sanitizedResult }, HttpStatusCodes.OK);
   } catch (err: any) {
     return c.json({ message: err.message || "Failed to update company settings" }, HttpStatusCodes.INTERNAL_SERVER_ERROR);
   }

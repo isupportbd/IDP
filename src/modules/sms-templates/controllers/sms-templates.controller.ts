@@ -6,7 +6,6 @@ import { smsLogs } from "../database/models/sms_logs.js";
 import { companySettings } from "@/modules/firm/database/models/company_settings.js";
 import {
   DEFAULT_TEMPLATES,
-  renderTemplate,
   callBulkSmsBd,
   normalizeBdMobile
 } from "../services/sms.service.js";
@@ -31,14 +30,10 @@ function isSuperAdmin(user: any): boolean {
   return roleName === "superadmin";
 }
 
-// 1. List Templates (with tenant isolation or superadmin master view)
+// 1. List Templates — SuperAdmin only (enforced at route level)
 export async function listTemplates(c: Context) {
   try {
-    const user = getAuthUser(c);
-    const superAdmin = isSuperAdmin(user);
-    const adminId = superAdmin ? null : resolveTenantAdminId(user);
-
-    // 1. Ensure global master templates exist in DB
+    // Ensure global master templates exist in DB
     const globalCount = await db
       .select({ count: sql<number>`count(*)` })
       .from(smsTemplates)
@@ -58,47 +53,17 @@ export async function listTemplates(c: Context) {
       }
     }
 
-    let templates: any[] = [];
+    // Always return global master templates (adminId = null)
+    const templates = await db.query.smsTemplates.findMany({
+      where: isNull(smsTemplates.adminId),
+      orderBy: [smsTemplates.id]
+    });
 
-    // 2. If tenant admin / staff, query tenant-specific templates
-    if (adminId) {
-      templates = await db.query.smsTemplates.findMany({
-        where: eq(smsTemplates.adminId, adminId),
-        orderBy: [smsTemplates.id]
-      });
-
-      // Auto-seed for this tenant if first time opening
-      if (templates.length === 0) {
-        for (const def of DEFAULT_TEMPLATES) {
-          await db.insert(smsTemplates).values({
-            adminId: adminId,
-            key: def.key,
-            name: def.name,
-            description: def.description,
-            body: def.body,
-            variables: def.variables,
-            isActive: true
-          }).catch(() => {});
-        }
-
-        templates = await db.query.smsTemplates.findMany({
-          where: eq(smsTemplates.adminId, adminId),
-          orderBy: [smsTemplates.id]
-        });
-      }
-    } else {
-      // Global master templates (SuperAdmin)
-      templates = await db.query.smsTemplates.findMany({
-        where: isNull(smsTemplates.adminId),
-        orderBy: [smsTemplates.id]
-      });
-    }
-
-    // Fallback in case of empty
-    if (!templates || templates.length === 0) {
-      templates = DEFAULT_TEMPLATES.map((t, idx) => ({
+    return c.json({
+      success: true,
+      data: templates.length > 0 ? templates : DEFAULT_TEMPLATES.map((t, idx) => ({
         id: idx + 1,
-        adminId: adminId ?? null,
+        adminId: null,
         key: t.key,
         name: t.name,
         description: t.description,
@@ -107,12 +72,7 @@ export async function listTemplates(c: Context) {
         isActive: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      }));
-    }
-
-    return c.json({
-      success: true,
-      data: templates
+      }))
     });
   } catch (error: any) {
     return c.json({
@@ -133,7 +93,7 @@ export async function listTemplates(c: Context) {
   }
 }
 
-// 2. Update Template Body & Status
+// 2. Update Template Body & Status — SuperAdmin only, global templates only
 export async function updateTemplate(c: Context) {
   try {
     const user = getAuthUser(c);
@@ -144,10 +104,7 @@ export async function updateTemplate(c: Context) {
       return c.json({ success: false, message: "Invalid template ID" }, 400);
     }
 
-    const superAdmin = isSuperAdmin(user);
-    const adminId = superAdmin ? null : resolveTenantAdminId(user);
-
-    let existing = await db.query.smsTemplates.findFirst({
+    const existing = await db.query.smsTemplates.findFirst({
       where: eq(smsTemplates.id, id)
     });
 
@@ -155,9 +112,12 @@ export async function updateTemplate(c: Context) {
       return c.json({ success: false, message: "Template not found" }, 404);
     }
 
-    const updateData: any = {
-      updatedAt: new Date()
-    };
+    // Ownership check: only global templates (adminId = null) can be edited here
+    if (existing.adminId !== null) {
+      return c.json({ success: false, message: "Forbidden: Only global master templates can be edited" }, 403);
+    }
+
+    const updateData: any = { updatedAt: new Date() };
     if (typeof body.body === "string" && body.body.trim()) {
       updateData.body = body.body.trim();
     }
@@ -184,7 +144,7 @@ export async function updateTemplate(c: Context) {
   }
 }
 
-// 3. Reset Template to Default
+// 3. Reset Template to Default — SuperAdmin only, global templates only
 export async function resetTemplate(c: Context) {
   try {
     const id = Number(c.req.param("id"));
@@ -195,6 +155,11 @@ export async function resetTemplate(c: Context) {
 
     if (!existing) {
       return c.json({ success: false, message: "Template not found" }, 404);
+    }
+
+    // Ownership check: only global templates can be reset
+    if (existing.adminId !== null) {
+      return c.json({ success: false, message: "Forbidden: Only global master templates can be reset" }, 403);
     }
 
     const def = DEFAULT_TEMPLATES.find((t) => t.key === existing.key);

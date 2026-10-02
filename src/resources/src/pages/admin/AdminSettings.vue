@@ -133,6 +133,9 @@ const handleSaveRules = async () => {
   try {
     await updateCompanySettings(form.value);
     isEditingRules.value = false;
+    // Sync form from the fresh sanitized response so masked API key
+    // and other SMS fields display correctly in locked (read-only) mode.
+    form.value = { ...company.value };
     toast.success("Rules & SMS configuration saved and locked");
   } catch (err: any) {
     toast.error(err.response?.data?.message || "Failed to update rules");

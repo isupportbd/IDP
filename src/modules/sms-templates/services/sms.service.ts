@@ -118,12 +118,8 @@ export async function resolveSenderRoleLabel(userId: number | null | undefined):
 
 export async function getEffectiveTemplate(key: string, adminId?: number | null) {
   try {
-    if (adminId) {
-      const tenantTpl = await db.query.smsTemplates.findFirst({
-        where: and(eq(smsTemplates.key, key), eq(smsTemplates.adminId, adminId), eq(smsTemplates.isActive, true))
-      });
-      if (tenantTpl) return tenantTpl;
-    }
+    // Always use the global master template (adminId = null).
+    // Admins do not have tenant-specific templates per design.
     const globalTpl = await db.query.smsTemplates.findFirst({
       where: and(eq(smsTemplates.key, key), isNull(smsTemplates.adminId), eq(smsTemplates.isActive, true))
     });
@@ -209,7 +205,6 @@ export async function sendVatSubmissionSms(params: {
   let smsApiKey = "";
   let senderId = "";
   let companyName = "IDP System";
-  let autoMessagingEnabled = true;
   let settings: any = null;
 
   try {
@@ -221,8 +216,6 @@ export async function sendVatSubmissionSms(params: {
       senderId = settings.smsSenderId || "";
       companyName = settings.companyName || companyName;
     }
-
-    if (!senderId) senderId = "";
   } catch {}
 
   const senderRole = await resolveSenderRoleLabel(params.sentByUserId);
@@ -254,9 +247,6 @@ export async function sendVatSubmissionSms(params: {
     return { ok: false, status: "FAILED", response: "No valid mobile number", message: renderedMessage };
   }
 
-  if (!autoMessagingEnabled) {
-    return { ok: false, status: "SKIPPED", response: "Auto messaging disabled in Firm Settings", message: renderedMessage };
-  }
 
   if (!smsApiKey || !senderId) {
     await db.insert(smsLogs).values({
