@@ -308,21 +308,28 @@ export const recordSubmission: Handler = async (c: any) => {
     }
 
     // Trigger automated SMS in background (non-blocking)
-    const user = c.get("user") || (c.req as any).user;
-    const adminId = client.createdBy || user?.adminId || user?.id || 1;
+    // Use client.createdBy as the authoritative adminId for gateway lookup.
+    // Fall back to the authenticated user's tenant admin. Never fall back to 1.
+    const user = c.get("auth") || c.get("user") || (c.req as any).user;
+    const adminId: number | null = client.createdBy
+      || (user?.adminId ? Number(user.adminId) : null)
+      || (user?.id ? Number(user.id) : null)
+      || null;
 
-    sendVatSubmissionSms({
-      clientName: client.companyName,
-      clientMobile: client.mobile,
-      clientAltMobile: client.alternativeMobile,
-      clientBin: client.binNumber,
-      taxPeriod,
-      submissionId: submissionId.trim(),
-      adminId,
-      sentByUserId: user?.id ?? null
-    }).catch((smsErr) => {
-      console.warn("[Submission Auto-SMS Warning]:", smsErr?.message || smsErr);
-    });
+    if (adminId) {
+      sendVatSubmissionSms({
+        clientName: client.companyName,
+        clientMobile: client.mobile,
+        clientAltMobile: client.alternativeMobile,
+        clientBin: client.binNumber,
+        taxPeriod,
+        submissionId: submissionId.trim(),
+        adminId,
+        sentByUserId: user?.id ?? null
+      }).catch((smsErr) => {
+        console.warn("[Submission Auto-SMS Warning]:", smsErr?.message || smsErr);
+      });
+    }
 
     return c.json(
       {

@@ -944,11 +944,12 @@ export const sendTestSms: Handler = async (c: any) => {
         .limit(1)
     )[0] || (await db.select().from(companySettings).where(isNull(companySettings.adminId)).limit(1))[0];
     const mobile = body?.mobile || adminUser.mobile || "01819234567";
-    const apiKey = body?.apiKey || (adminUser as any).smsApiKey || firmSetting?.smsApiKey;
-    const senderId = body?.senderId || (adminUser as any).smsSenderId || firmSetting?.smsSenderId || "";
+    // firmSetting is the correct source for smsApiKey/senderId — users table doesn't have these fields
+    const apiKey = body?.apiKey || firmSetting?.smsApiKey;
+    const senderId = body?.senderId || firmSetting?.smsSenderId || "";
     const message = body?.message || "Test SMS from VAT IDP Portal. Your SMS gateway is active and live stock is synced.";
 
-    let newSmsBalance = Math.max(0, ((adminUser as any).smsBalance ?? 0) - 1);
+    let newSmsBalance = Math.max(0, (adminUser.smsBalance ?? 0) - 1);
 
     // If SMS Provider API key is provided, transmit directly and fetch live remaining balance from provider
     if (apiKey) {
