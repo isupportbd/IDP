@@ -688,6 +688,8 @@ const handleResetToDefault = async () => {
       allowNegativeBalance: false,
       smsApiKey: "",
       smsSenderId: "",
+      smsProvider: "",
+      smsEndpointUrl: "",
       services: [],
       expenseHeads: []
     };
@@ -1727,8 +1729,25 @@ onMounted(async () => {
           </div>
 
           <div class="mb-3">
-            <label class="form-label text-light small fw-medium">SMS Gateway Provider</label>
-            <input type="text" class="form-control idp-input" value="BulkSMSBD / Greenweb API" readonly disabled />
+            <label class="form-label text-light small fw-medium">SMS Gateway Provider Name</label>
+            <input 
+              v-model="form.smsProvider" 
+              type="text" 
+              class="form-control idp-input" 
+              :disabled="!isEditingRules" 
+              placeholder="e.g. BulkSMSBD, GreenWeb, etc." 
+            />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label text-light small fw-medium">API Endpoint URL</label>
+            <input 
+              v-model="form.smsEndpointUrl" 
+              type="text" 
+              class="form-control idp-input font-monospace" 
+              :disabled="!isEditingRules" 
+              placeholder="e.g. http://bulksmsbd.net/api/smsapi" 
+            />
           </div>
 
           <div class="mb-3">

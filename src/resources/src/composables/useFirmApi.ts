@@ -32,6 +32,8 @@ export interface CompanySettings {
   maskedSmsApiKey?: string | null;
   isSmsConfigured?: boolean;
   smsSenderId?: string | null;
+  smsProvider?: string | null;
+  smsEndpointUrl?: string | null;
   services?: any[];
   expenseHeads?: any[];
 }
@@ -86,6 +88,8 @@ export function useFirmApi() {
     allowNegativeBalance: false,
     smsApiKey: "",
     smsSenderId: "",
+    smsProvider: "",
+    smsEndpointUrl: "",
     services: [],
     expenseHeads: []
   });

@@ -23,7 +23,9 @@ export const CompanySettingsSchema = z.object({
   binUniqueEnforcement: z.boolean().default(true),
   allowDuplicateMobile: z.boolean().default(true),
   smsApiKey: z.string().optional().nullable().or(z.literal("")),
-  smsSenderId: z.string().max(50).optional().nullable().or(z.literal(""))
+  smsSenderId: z.string().max(50).optional().nullable().or(z.literal("")),
+  smsProvider: z.string().max(100).optional().nullable().or(z.literal("")),
+  smsEndpointUrl: z.string().optional().nullable().or(z.literal(""))
 });
 
 // ── BANK ACCOUNT SCHEMAS ─────────────────────────────────────────────
