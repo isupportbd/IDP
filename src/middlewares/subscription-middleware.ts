@@ -85,6 +85,20 @@ export async function subscriptionMiddleware(c: Context, next: Next) {
       );
     }
 
+    // 3. Billing Feature Gate — check plan.hasAccounts for /billing routes
+    // This replaces the duplicate inline middleware that was in billing/routes/api.ts
+    const isBillingRoute = c.req.path.includes("/billing");
+    if (isBillingRoute && plan && plan.hasAccounts === false) {
+      return c.json(
+        {
+          success: false,
+          isBillingLocked: true,
+          message: `Account & Billing access is not included in your current plan (${plan.name}). Please upgrade your subscription plan to access Billing & Collections.`
+        },
+        403
+      );
+    }
+
     // 2. Storage Quota Exhaustion Check on write operations (POST, PUT)
     if (method === "POST" || method === "PUT") {
       const baseStorageMB = plan?.maxStorageMB || 1024;
