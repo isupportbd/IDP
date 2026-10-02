@@ -242,11 +242,9 @@ export async function sendTestSms(c: Context) {
     }
 
     const adminId = resolveTenantAdminId(user);
-    const settings = (await db.query.companySettings.findFirst({
+    const settings = await db.query.companySettings.findFirst({
       where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
-    })) || (await db.query.companySettings.findFirst({
-      where: isNull(companySettings.adminId)
-    }));
+    });
 
     if (!settings?.smsApiKey || !settings?.smsSenderId) {
       return c.json({
@@ -311,24 +309,9 @@ export async function getGatewaySettings(c: Context) {
     const user = getAuthUser(c);
     const adminId = resolveTenantAdminId(user);
 
-    let settings = await db.query.companySettings.findFirst({
+    const settings = await db.query.companySettings.findFirst({
       where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
     });
-
-    if (adminId && (!settings || !settings.smsApiKey)) {
-      const globalSettings = await db.query.companySettings.findFirst({
-        where: isNull(companySettings.adminId)
-      });
-      if (globalSettings && globalSettings.smsApiKey) {
-        settings = {
-          ...(settings || {}),
-          smsApiKey: globalSettings.smsApiKey,
-          smsSenderId: settings?.smsSenderId || globalSettings.smsSenderId || "",
-          smsProvider: settings?.smsProvider || globalSettings.smsProvider || "",
-          smsEndpointUrl: settings?.smsEndpointUrl || globalSettings.smsEndpointUrl || ""
-        } as any;
-      }
-    }
 
     const rawKey = settings?.smsApiKey || "";
     const isConfigured = Boolean(rawKey && rawKey.trim().length > 0);
@@ -406,11 +389,9 @@ export async function checkGatewayBalance(c: Context) {
     const user = getAuthUser(c);
     const adminId = resolveTenantAdminId(user);
 
-    const settings = (await db.query.companySettings.findFirst({
+    const settings = await db.query.companySettings.findFirst({
       where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
-    })) || (await db.query.companySettings.findFirst({
-      where: isNull(companySettings.adminId)
-    }));
+    });
 
     const apiKey = settings?.smsApiKey?.trim();
     const providerUrl = settings?.smsEndpointUrl?.trim();

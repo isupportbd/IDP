@@ -221,16 +221,7 @@ export async function sendVatSubmissionSms(params: {
       senderId = settings.smsSenderId || "";
       companyName = settings.companyName || companyName;
     }
-    // Fallback to global superadmin gateway settings if tenant hasn't configured custom key
-    if (!smsApiKey) {
-      const globalSettings = await db.query.companySettings.findFirst({
-        where: isNull(companySettings.adminId)
-      });
-      if (globalSettings?.smsApiKey) {
-        smsApiKey = globalSettings.smsApiKey;
-        if (!senderId) senderId = globalSettings.smsSenderId || "";
-      }
-    }
+
     if (!senderId) senderId = "";
   } catch {}
 
