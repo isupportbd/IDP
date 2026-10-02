@@ -672,7 +672,7 @@ const handleSubmit = async () => {
                     ></i>
                   </div>
                   <p class="text-muted small mb-0">
-                    Complete purchase/sales ledgers (Mushak 6.1, 6.2, 6.3), treasury challans, and 9.1 return filing.
+                    Complete purchase/sales ledgers, treasury challans, and 9.1 return filing.
                   </p>
                 </div>
               </div>
