@@ -259,7 +259,9 @@ export async function sendTestSms(c: Context) {
       apiKey: settings.smsApiKey,
       senderId: settings.smsSenderId,
       number: recipient,
-      message: message.trim()
+      message: message.trim(),
+      endpointUrl: settings.smsEndpointUrl || undefined,
+      provider: settings.smsProvider || undefined
     });
 
     await db.insert(smsLogs).values({
@@ -327,9 +329,9 @@ export async function getGatewaySettings(c: Context) {
         maskedApiKey,
         isConfigured,
         smsApiKey: "", // Never expose raw API key to browser
-        smsSenderId: settings?.smsSenderId || "8809617614050",
-        provider: "BulkSMSBD",
-        endpoint: "http://bulksmsbd.net/api/smsapi"
+        smsSenderId: settings?.smsSenderId || "",
+        provider: settings?.smsProvider || "",
+        endpoint: settings?.smsEndpointUrl || ""
       }
     });
   } catch (error: any) {
@@ -343,7 +345,7 @@ export async function updateGatewaySettings(c: Context) {
     const user = getAuthUser(c);
     const adminId = resolveTenantAdminId(user);
     const body = await c.req.json();
-    const { smsApiKey, smsSenderId } = body;
+    const { smsApiKey, smsSenderId, provider, endpoint } = body;
 
     const existing = await db.query.companySettings.findFirst({
       where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
@@ -354,7 +356,9 @@ export async function updateGatewaySettings(c: Context) {
 
     if (existing) {
       const updateData: any = {
-        smsSenderId: smsSenderId ? smsSenderId.trim() : "8809617614050",
+        smsSenderId: smsSenderId ? smsSenderId.trim() : "",
+        smsProvider: provider ? provider.trim() : "",
+        smsEndpointUrl: endpoint ? endpoint.trim() : "",
         updatedAt: new Date()
       };
       if (isUpdatingKey) {
@@ -365,7 +369,9 @@ export async function updateGatewaySettings(c: Context) {
       await db.insert(companySettings).values({
         adminId: adminId ?? null,
         smsApiKey: isUpdatingKey ? trimmedKey : null,
-        smsSenderId: smsSenderId ? smsSenderId.trim() : "8809617614050",
+        smsSenderId: smsSenderId ? smsSenderId.trim() : "",
+        smsProvider: provider ? provider.trim() : "",
+        smsEndpointUrl: endpoint ? endpoint.trim() : "",
         companyName: "IDP"
       });
     }
@@ -392,6 +398,7 @@ export async function checkGatewayBalance(c: Context) {
     }));
 
     const apiKey = settings?.smsApiKey?.trim();
+    const providerUrl = settings?.smsEndpointUrl?.trim();
     if (!apiKey) {
       return c.json({
         success: false,
@@ -399,7 +406,19 @@ export async function checkGatewayBalance(c: Context) {
       }, 400);
     }
 
-    const res = await fetch(`http://bulksmsbd.net/api/getBalanceApi?api_key=${apiKey}`, { method: "GET" });
+    // Attempt to dynamically construct balance URL if possible, otherwise fallback
+    let balanceUrl = "";
+    if (providerUrl && providerUrl.includes("bulksmsbd.net")) {
+      balanceUrl = `http://bulksmsbd.net/api/getBalanceApi?api_key=${apiKey}`;
+    } else if (providerUrl) {
+      // Very basic generic balance check fallback (may not work for all)
+      const url = new URL(providerUrl);
+      balanceUrl = `${url.origin}/api/getBalanceApi?api_key=${apiKey}`;
+    } else {
+       balanceUrl = `http://bulksmsbd.net/api/getBalanceApi?api_key=${apiKey}`; // fallback
+    }
+
+    const res = await fetch(balanceUrl, { method: "GET" });
     const text = await res.text();
     let balance = "0.00";
 

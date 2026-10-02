@@ -24,9 +24,9 @@ const activeTab = ref<"templates" | "logs" | "gateway">("templates");
 // Gateway Setup state
 const gatewayForm = ref({
   smsApiKey: "",
-  smsSenderId: "8809617614050",
-  provider: "BulkSMSBD",
-  endpoint: "http://bulksmsbd.net/api/smsapi"
+  smsSenderId: "",
+  provider: "",
+  endpoint: ""
 });
 const isSavingGateway = ref(false);
 const isCheckingBalance = ref(false);
@@ -91,9 +91,9 @@ const loadGatewaySettings = async () => {
       }
       gatewayForm.value = {
         smsApiKey: "", // Never keep raw secret in frontend model
-        smsSenderId: data.smsSenderId || "8809617614050",
-        provider: data.provider || "BulkSMSBD",
-        endpoint: data.endpoint || "http://bulksmsbd.net/api/smsapi"
+        smsSenderId: data.smsSenderId || "",
+        provider: data.provider || "",
+        endpoint: data.endpoint || ""
       };
     }
   } catch {}
@@ -109,7 +109,9 @@ const handleSaveGateway = async () => {
   try {
     const res = await api.updateGatewaySettings({
       smsApiKey: gatewayForm.value.smsApiKey,
-      smsSenderId: gatewayForm.value.smsSenderId
+      smsSenderId: gatewayForm.value.smsSenderId,
+      provider: gatewayForm.value.provider,
+      endpoint: gatewayForm.value.endpoint
     });
     toast.success(res?.message || "Gateway configuration saved successfully!");
     isEditingGateway.value = false;
@@ -618,28 +620,31 @@ const handleSendTestSms = async () => {
                 <i class="bi bi-pencil-fill me-1"></i> Editing
               </span>
               <span class="badge bg-primary text-white">
-                BulkSMSBD Provider
+                {{ gatewayForm.provider || 'Custom Provider' }}
               </span>
             </div>
           </div>
 
           <div class="card-body p-4">
-            <!-- Provider Info -->
             <div class="row g-3 mb-4">
               <div class="col-sm-6">
-                <label class="form-label fs-8 text-muted fw-semibold">SMS Provider:</label>
-                <div class="form-control bg-dark text-white border-secondary fs-8 d-flex align-items-center justify-content-between">
-                  <span>BulkSMSBD.net</span>
-                  <span class="badge bg-success">Default</span>
-                </div>
+                <label class="form-label fs-8 text-muted fw-semibold">SMS Provider Name:</label>
+                <input
+                  type="text"
+                  v-model="gatewayForm.provider"
+                  class="form-control bg-dark text-white border-secondary fs-8"
+                  :disabled="!isEditingGateway"
+                  placeholder="e.g. BulkSMSBD, GreenWeb, etc."
+                />
               </div>
               <div class="col-sm-6">
                 <label class="form-label fs-8 text-muted fw-semibold">API Endpoint URL:</label>
                 <input
                   type="text"
+                  v-model="gatewayForm.endpoint"
                   class="form-control bg-dark text-white border-secondary fs-8 font-monospace"
-                  :value="gatewayForm.endpoint"
-                  readonly
+                  :disabled="!isEditingGateway"
+                  placeholder="http://bulksmsbd.net/api/smsapi"
                 />
               </div>
             </div>

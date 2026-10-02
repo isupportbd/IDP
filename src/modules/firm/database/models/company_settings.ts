@@ -20,7 +20,9 @@ export const companySettings = pgTable("company_settings", {
   binUniqueEnforcement: boolean("bin_unique_enforcement").default(true).notNull(),
   allowDuplicateMobile: boolean("allow_duplicate_mobile").default(true).notNull(),
   smsApiKey: text("sms_api_key"),
-  smsSenderId: varchar("sms_sender_id", { length: 50 }).default("VAT-IDP"),
+  smsSenderId: varchar("sms_sender_id", { length: 50 }).default(""),
+  smsProvider: varchar("sms_provider", { length: 100 }).default(""),
+  smsEndpointUrl: text("sms_endpoint_url").default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 }, (table) => ({

@@ -136,22 +136,32 @@ export async function getEffectiveTemplate(key: string, adminId?: number | null)
   }
 }
 
-export async function callBulkSmsBd(opts: {
+export async function callSmsGateway(opts: {
   apiKey: string;
   senderId: string;
   number: string;
   message: string;
+  endpointUrl?: string;
+  provider?: string;
 }): Promise<{ ok: boolean; raw: string }> {
   try {
+    const endpoint = opts.endpointUrl || BULKSMSBD_ENDPOINT;
+    const isBulkSmsBd = endpoint.includes("bulksmsbd");
+
     const params = new URLSearchParams({
       api_key: opts.apiKey.trim(),
       type: "text",
       number: opts.number.trim(),
-      senderid: opts.senderId.trim(),
       message: opts.message
     });
+    
+    if (isBulkSmsBd) {
+      params.append("senderid", opts.senderId.trim());
+    } else {
+      params.append("senderid", opts.senderId.trim()); // Greenweb/others often use senderid too
+    }
 
-    const res = await fetch(`${BULKSMSBD_ENDPOINT}?${params.toString()}`, { method: "GET" });
+    const res = await fetch(`${endpoint}?${params.toString()}`, { method: "GET" });
     const text = await res.text();
     let ok = res.ok;
     let friendly = text;
@@ -181,6 +191,8 @@ export async function callBulkSmsBd(opts: {
   }
 }
 
+export const callBulkSmsBd = callSmsGateway;
+
 export async function sendVatSubmissionSms(params: {
   clientName: string;
   clientMobile?: string | null;
@@ -198,9 +210,10 @@ export async function sendVatSubmissionSms(params: {
   let senderId = "";
   let companyName = "IDP System";
   let autoMessagingEnabled = true;
+  let settings: any = null;
 
   try {
-    const settings = await db.query.companySettings.findFirst({
+    settings = await db.query.companySettings.findFirst({
       where: eq(companySettings.adminId, params.adminId)
     });
     if (settings) {
@@ -269,11 +282,13 @@ export async function sendVatSubmissionSms(params: {
   }
 
   // 3. Send SMS via Gateway
-  const result = await callBulkSmsBd({
+  const result = await callSmsGateway({
     apiKey: smsApiKey,
     senderId: senderId,
     number: recipient,
-    message: renderedMessage
+    message: renderedMessage,
+    endpointUrl: settings?.smsEndpointUrl || undefined,
+    provider: settings?.smsProvider || undefined
   });
 
   const finalStatus = result.ok ? "SENT" : "FAILED";

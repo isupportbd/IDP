@@ -73,7 +73,7 @@ export function useSmsTemplatesApi() {
     return res.data?.data as SmsGatewaySettings;
   };
 
-  const updateGatewaySettings = async (payload: { smsApiKey: string; smsSenderId: string }) => {
+  const updateGatewaySettings = async (payload: { smsApiKey: string; smsSenderId: string; provider?: string; endpoint?: string }) => {
     const res = await axios.put("/api/sms-templates/gateway", payload);
     return res.data;
   };
