@@ -65,7 +65,28 @@ export const getCompanySettings: Handler = async (c: any) => {
           .returning()
       )[0];
     }
-    const rawSmsKey = settings.smsApiKey || "";
+    let rawSmsKey = settings.smsApiKey || "";
+    let finalSenderId = settings.smsSenderId || "";
+    let finalProvider = settings.smsProvider || "";
+    let finalEndpoint = settings.smsEndpointUrl || "";
+
+    // Fallback to global SMS config if tenant doesn't have one
+    if (!rawSmsKey && targetAdminId) {
+      const globalSettings = (
+        await db
+          .select()
+          .from(companySettings)
+          .where(isNull(companySettings.adminId))
+          .limit(1)
+      )[0];
+      if (globalSettings && globalSettings.smsApiKey) {
+        rawSmsKey = globalSettings.smsApiKey;
+        if (!finalSenderId) finalSenderId = globalSettings.smsSenderId || "";
+        if (!finalProvider) finalProvider = globalSettings.smsProvider || "";
+        if (!finalEndpoint) finalEndpoint = globalSettings.smsEndpointUrl || "";
+      }
+    }
+
     const isSmsConfigured = Boolean(rawSmsKey && rawSmsKey.trim().length > 0);
     const maskedSmsApiKey = isSmsConfigured
       ? rawSmsKey.length > 8
@@ -75,6 +96,9 @@ export const getCompanySettings: Handler = async (c: any) => {
 
     const sanitizedData = {
       ...settings,
+      smsSenderId: finalSenderId,
+      smsProvider: finalProvider,
+      smsEndpointUrl: finalEndpoint,
       smsApiKey: "", // Never expose raw API key to client
       maskedSmsApiKey,
       isSmsConfigured

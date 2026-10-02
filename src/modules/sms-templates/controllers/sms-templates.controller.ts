@@ -311,9 +311,24 @@ export async function getGatewaySettings(c: Context) {
     const user = getAuthUser(c);
     const adminId = resolveTenantAdminId(user);
 
-    const settings = await db.query.companySettings.findFirst({
+    let settings = await db.query.companySettings.findFirst({
       where: adminId ? eq(companySettings.adminId, adminId) : isNull(companySettings.adminId)
     });
+
+    if (adminId && (!settings || !settings.smsApiKey)) {
+      const globalSettings = await db.query.companySettings.findFirst({
+        where: isNull(companySettings.adminId)
+      });
+      if (globalSettings && globalSettings.smsApiKey) {
+        settings = {
+          ...(settings || {}),
+          smsApiKey: globalSettings.smsApiKey,
+          smsSenderId: settings?.smsSenderId || globalSettings.smsSenderId || "",
+          smsProvider: settings?.smsProvider || globalSettings.smsProvider || "",
+          smsEndpointUrl: settings?.smsEndpointUrl || globalSettings.smsEndpointUrl || ""
+        } as any;
+      }
+    }
 
     const rawKey = settings?.smsApiKey || "";
     const isConfigured = Boolean(rawKey && rawKey.trim().length > 0);
