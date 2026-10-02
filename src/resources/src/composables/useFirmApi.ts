@@ -85,7 +85,7 @@ export function useFirmApi() {
     allowDuplicateMobile: true,
     allowNegativeBalance: false,
     smsApiKey: "",
-    smsSenderId: "VAT-IDP",
+    smsSenderId: "",
     services: [],
     expenseHeads: []
   });

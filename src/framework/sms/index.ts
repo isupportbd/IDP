@@ -47,7 +47,7 @@ export async function fetchProviderBalance(apiKey?: string | null): Promise<numb
  * Send SMS via Gateway Provider API and fetch live remaining balance directly from the provider
  */
 export async function dispatchProviderSms(options: SmsSendOptions): Promise<{ success: boolean; message: string; liveBalance?: number }> {
-  const { apiKey, senderId = "VAT-IDP", mobile, message } = options;
+  const { apiKey, senderId = "", mobile, message } = options;
 
   if (!apiKey || !apiKey.trim()) {
     return { success: false, message: "SMS Gateway API Key is missing in Firm Settings." };
@@ -63,7 +63,7 @@ export async function dispatchProviderSms(options: SmsSendOptions): Promise<{ su
         api_key: apiKey.trim(),
         type: "text",
         number: cleanMobile,
-        senderid: senderId || "VAT-IDP",
+        senderid: senderId || "",
         message: message
       },
       timeout: 10000

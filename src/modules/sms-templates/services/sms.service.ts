@@ -228,10 +228,10 @@ export async function sendVatSubmissionSms(params: {
       });
       if (globalSettings?.smsApiKey) {
         smsApiKey = globalSettings.smsApiKey;
-        if (!senderId) senderId = globalSettings.smsSenderId || "VAT-IDP";
+        if (!senderId) senderId = globalSettings.smsSenderId || "";
       }
     }
-    if (!senderId) senderId = "VAT-IDP";
+    if (!senderId) senderId = "";
   } catch {}
 
   const senderRole = await resolveSenderRoleLabel(params.sentByUserId);

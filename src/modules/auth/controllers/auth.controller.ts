@@ -945,7 +945,7 @@ export const sendTestSms: Handler = async (c: any) => {
     )[0] || (await db.select().from(companySettings).where(isNull(companySettings.adminId)).limit(1))[0];
     const mobile = body?.mobile || adminUser.mobile || "01819234567";
     const apiKey = body?.apiKey || (adminUser as any).smsApiKey || firmSetting?.smsApiKey;
-    const senderId = body?.senderId || (adminUser as any).smsSenderId || firmSetting?.smsSenderId || "VAT-IDP";
+    const senderId = body?.senderId || (adminUser as any).smsSenderId || firmSetting?.smsSenderId || "";
     const message = body?.message || "Test SMS from VAT IDP Portal. Your SMS gateway is active and live stock is synced.";
 
     let newSmsBalance = Math.max(0, ((adminUser as any).smsBalance ?? 0) - 1);

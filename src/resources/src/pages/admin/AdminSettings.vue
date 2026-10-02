@@ -687,7 +687,7 @@ const handleResetToDefault = async () => {
       allowDuplicateMobile: true,
       allowNegativeBalance: false,
       smsApiKey: "",
-      smsSenderId: "VAT-IDP",
+      smsSenderId: "",
       services: [],
       expenseHeads: []
     };
@@ -1754,7 +1754,7 @@ onMounted(async () => {
               type="text"
               class="form-control idp-input"
               :disabled="!isEditingRules"
-              placeholder="e.g. VAT-IDP"
+              placeholder="e.g. MyBrand"
             />
           </div>
 
