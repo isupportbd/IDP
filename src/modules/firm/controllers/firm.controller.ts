@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import type { Handler } from "hono";
 import { broadcast, db, HttpStatusCodes, resolveTenantContext } from "@/framework/facade.js";
 import { fetchProviderBalance } from "@/framework/sms/index.js";
@@ -38,13 +38,15 @@ export const getCompanySettings: Handler = async (c: any) => {
       await db
         .select()
         .from(companySettings)
-        .where(eq(companySettings.adminId, targetAdminId))
+        .where(targetAdminId ? eq(companySettings.adminId, targetAdminId) : isNull(companySettings.adminId))
         .limit(1)
     )[0];
 
     if (!settings) {
       // Find the user details to prefill the tenant's company name/email/phone
-      const [adminUser] = await db.select().from(users).where(eq(users.id, targetAdminId)).limit(1);
+      const [adminUser] = targetAdminId 
+        ? await db.select().from(users).where(eq(users.id, targetAdminId)).limit(1)
+        : [null];
       settings = (
         await db
           .insert(companySettings)
@@ -102,7 +104,7 @@ export const updateCompanySettings: Handler = async (c: any) => {
       await db
         .select()
         .from(companySettings)
-        .where(eq(companySettings.adminId, targetAdminId))
+        .where(targetAdminId ? eq(companySettings.adminId, targetAdminId) : isNull(companySettings.adminId))
         .limit(1)
     )[0];
 
